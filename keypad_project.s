@@ -1,88 +1,311 @@
+		.data
+
+start_prompt: 	.string 0xC, 0xD, 0xA, 0x9, "Welcome to the Keypad Project! If you're seeing this message, that means I haven't bricked the Tiva (yet).", 0xD, 0xA, 0x9, 0x9, "Press space to start the program. Press 'x' at anytime to quit.", 0
+
+reply_string: 	.string 0xD, 0xA, 0x9, "You pressed key ", 0
+key_string:  	.string "xx", 0
+
+key:		.byte 0x00
+status:		.byte 0x00
+scanning:	.byte 0x00
+
 	.text
 	.global keypad_init
 	.global keypad_project
+	.global uart_interrupt_init
+    .global gpio_interrupt_init
+	.global uart_init
+	.global gpio_keypad_init
+	.global output_character
+	.global read_character
+	.global read_string
+	.global output_string
 
-; Offsets from Table 5-7. System Control Register Map (pg. 232-237)
-GPIORCGC:         .equ 0x0608   ; GPIO Clock Register
-GPIODIR:          .equ 0x0400	; GPIO Direction Register
-GPIODEN:          .equ 0x051C	; GPIO Digital Register
-GPIODATA:         .equ 0x03FC	; GPIO Data Register
-GPIOPUR:          .equ 0x0510	; GPIO Pull-Up Resistor Register
+	.global string2int
+	.global int2string
+	.global division
+	.global multiplication
+	.global newline
 
+	.global UART0_Handler
+	.global GPIO_PortD_Handler
+
+ptr_to_start_prompt: 	.word start_prompt
+ptr_to_reply_string:	.word reply_string
+ptr_to_key_string:		.word key_string
+
+ptr_to_key:				.word key
+ptr_to_status:			.word status
+ptr_to_scanning:		.word scanning
 
 ; GENERAL KEYPAD LAYOUT
 ;
 ;   | PA2 | PA3 | PA4 | PA5 |     |
 ;   -------------------------------
 ;   |  #0 |  #1 |  #2 |  #3 | PD0 |
-;   |  #4 |  #5 |  #6 |  #7 | PD1 | 
-;   |  #8 |  #9 | #10 | #11 | PD2 | 
+;   |  #4 |  #5 |  #6 |  #7 | PD1 |
+;   |  #8 |  #9 | #10 | #11 | PD2 |
 ;   | #12 | #13 | #14 | #15 | PD3 |
 ;   -------------------------------
 
+; General Purpose Timers
+GPTMCFG:          .equ 0x000	; GPTM Configuration
+GPTMTAMR:         .equ 0x004	; GPTM Timer A Mode
+GPTMCTL:          .equ 0x00C	; GPTM Control
+GPTMIMR:          .equ 0x018	; GPTM Interrupt Mask
+GPTMICR:	      .equ 0x024	; GPTM Interrupt Clear Register
+GPTMTAILR:        .equ 0x028	; GPTM Timer A Interval Load
+GPTMTAR:          .equ 0x048	; GPTM Timer A
+
+; General Purpose Input / Output
+GPIODATA:         .equ 0x3FC	; GPIO Data Register
+GPIODIR:          .equ 0x400	; GPIO Direction Register
+
+GPIOIS:		      .equ 0x404	; GPIO Interrupt Sense
+GPIOIBE:	      .equ 0x408	; GPIO Interrupt Both Edges
+GPIOIEV:	      .equ 0x40C	; GPIO Interrupt Event
+GPIOIM:		      .equ 0x410	; GPIO Interrupt Mask
+GPIOICR:	      .equ 0x41C	; GPIO Interrupt Clear Register
+
+GPIOAFSEL:		  .equ 0x420	; GPIO Alternate Function Select
+GPIOPUR:          .equ 0x510	; GPIO Pull-Up Resistor Register
+GPIOPDR:		  .equ 0x514	; GPIO Pull-Down Resistor Register
+GPIODEN:          .equ 0x51C	; GPIO Digital Register
+GPIOCTL:		  .equ 0x52C	; GPIO Port Control
+GPIORCGC:         .equ 0x608   	; GPIO Run Mode Clock Gating Control
+
+; GPIO Ports
+PORT_MASK:		  .equ 0x00F
+PORTA_INTMASK: 	  .equ 0x03C
+PA2:			  .equ 0x004
+PA3:			  .equ 0x008
+PA4:			  .equ 0x010
+PA5:			  .equ 0x020
+
+PORTD_INTMASK:	  .equ 0x00F
+PD0:			  .equ 0x001
+PD1:			  .equ 0x002
+PD2:			  .equ 0x004
+PD3:			  .equ 0x008
+
+; Universal Asynchronous Receiver/Transmitters
+UARTDR:			  .equ 0x000	; UART Data Register
+U0FR: 			  .equ 0x018	; UART0 Flag Register
+UARTIBRD: 		  .equ 0x024	; UART Integer Baud-Rate Divisor
+UARTFBRD: 		  .equ 0x028	; UART Fractional Buad-Rate Divisor
+UARTLCRH:		  .equ 0x02C	; UART Line Control
+UARTCTL:		  .equ 0x030	; UART Control
+UARTIM:           .equ 0x038	; UART Interrupt Mask
+UARTICR:          .equ 0x044	; UART Interrupt Clear Register
+UARTCC:			  .equ 0xFC8	; UART Clock Configuration
+
+RXIM:             .equ 0x010	; UART Receive Interrupt Mask
+RXIC:             .equ 0x010	; UART Receive Raw Interrupt Status
+
+
+RCGCTIMER:        .equ 0x604	; 16/32-Bit General-Purpose Timer Run Mode Clock Gating Control
+
+; Cortex M4 Peripherals
+ENUART0:          .equ 0x020	; UART0 Enable Bit
+EN0:              .equ 0x100	; Interrupt 0-31 Set Enable
+
+; Program-specific Constants
+START_KEY:		  .equ 0x020
+EXIT_KEY:		  .equ 0x078
+STATUS_MENU:	  .equ 0x000
+STATUS_ACTIVE:	  .equ 0x001
+STATUS_EXIT:	  .equ 0x002
 
 
 keypad_init:
 	PUSH {lr}	; Store register lr on stack
-    
-    ; System control register base address in 0x400FE000 (pg. 231)
-    MOV r0, #0xE000
-    MOVT r0, #0x400F
 
-    ; Set bits 0 and 3 of GPIO Run Mode Clock Gating Control
-    ;   to enable the clock for ports A and D
-    LDR r1, [r0, #GPIORCGC]
-    ORR r1, r1, #0x0009
-    STR r1, [r0, #GPIORCGC]
+	BL uart_init
+	BL gpio_keypad_init
 
-    ; Must be a delay of 3 system clocks after GPIO module clock 
-    ;   is enabled (pg. 658-659)
-    nop
-    nop
-    nop
+	LDR r0, ptr_to_start_prompt
+	BL output_string
 
-    ; Configure GPIO Port D (base address = 0x40007000)
-    MOV r0, #0x7000
-    MOVT r0, #0x4000
+	BL uart_interrupt_init
 
-    ; Configure Pins 0-3 as input 
-    LDR r1, [r0, #GPIODIR]
-    BIC r1, r1, #0x000F
-    STR r1, [r0, #GPIODIR]
-
-    ; Set Digital Enable for Pins 0-3
-    LDR r1, [r0, #GPIODEN]
-    ORR r1, r1, #0x000F
-    STR r1, [r0, #GPIODEN]
-
-    ; Configure GPIO Port A (base address = 0x40007000)
-    MOV r0, #0x4000
-    MOVT r0, #0x4000
-
-    ; Configure Pins 2-5 as output 
-    LDR r1, [r0, #GPIODIR]
-    ORR r1, r1, #0x003C
-    STR r1, [r0, #GPIODIR]
-
-    ; Set Digital Enable for Pins 2-5
-    LDR r1, [r0, #GPIODEN]
-    ORR r1, r1, #0x003C
-    STR r1, [r0, #GPIODEN]
-
-    
-
- 
 	POP {lr}
 	MOV pc, lr
 
 keypad_project:
 	PUSH {lr}	; Store register lr on stack
-    
-          ; Your code is placed here
- 
+
+    ; Menu / Instructions
+    LDR r0, ptr_to_status
+poll_start:
+	LDRB r1, [r0]
+	CMP r1, #STATUS_ACTIVE
+	BLT poll_start
+
+	BL gpio_interrupt_init
+
+	MOV r0, #0x40004000
+scan_loop:
+	LDR r1, ptr_to_status
+	LDRB r2, [r1]
+	CMP r2, #STATUS_EXIT
+	BEQ end_scan
+
+	LDR r1, ptr_to_scanning
+	; Set PA2 high and PA3/4/5 low
+	MOV r3, #PA2
+	STRB r3, [r1]
+	STRB r3, [r0, #GPIODATA]
+	nop
+	nop
+
+	; Set PA3 high and PA2/4/5 low
+	MOV r3, #PA3
+	STRB r3, [r1]
+	STRB r3, [r0, #GPIODATA]
+	nop
+	nop
+
+	; Set PA4 high and PA2/3/5 low
+	MOV r3, #PA4
+	STRB r3, [r1]
+	STRB r3, [r0, #GPIODATA]
+	nop
+	nop
+
+	; Set PA5 high and PA2/3/4 low
+	MOV r3, #PA5
+	STRB r3, [r1]
+	STRB r3, [r0, #GPIODATA]
+	nop
+	nop
+
+	B scan_loop
+
+
+end_scan:
 	POP {lr}
 	MOV pc, lr
 
+GPIO_PortD_Handler:
+	PUSH {lr}
+
+	; Interrupt generated by Port D
+	MOV r0, #0x7000
+	MOVT r0, #0x4000
+
+	; Check which Row was pressed and clear that interrupt
+	LDRB r1, [r0, #GPIOICR]
+	MOV r2, r1
+	BIC r1, r1, r1
+	STRB r1, [r0, #GPIOICR]
+
+	 ; Pointer to global data, indicating which column is high
+	LDR r2, ptr_to_scanning
+	LDRB r2, [r2]
+
+	TST r2, #PA2
+	ITT EQ
+	MOVEQ r3, #0x00
+	BEQ calculate_key
+
+	TST r2, #PA3
+	ITT EQ
+	MOVEQ r3, #0x01
+	BEQ calculate_key
+
+	TST r2, #PA4
+	ITT EQ
+	MOVEQ r3, #0x02
+	BEQ calculate_key
+
+	TST r2, #PA5
+	ITT EQ
+	MOVEQ r3, #0x03
+	BEQ calculate_key
+
+	; Else invalid input
+	MOV r3, #0xFF
+	B PortD_Handled
+
+calculate_key:
+
+	; Key pressed = (PA# - 2) + (PD# * 4)
+	TST r1, #PD0
+	ITT EQ
+	ADDEQ r3, r3, #0x00
+	BEQ PortD_Handled
+
+	TST r1, #PD1
+	ITT EQ
+	ADDEQ r3, r3, #0x04
+	BEQ PortD_Handled
+
+	TST r1, #PD0
+	ITT EQ
+	ADDEQ r3, r3, #0x08
+	BEQ PortD_Handled
+
+	TST r1, #PD0
+	ITT EQ
+	ADDEQ r3, r3, #0x0C
+	BEQ PortD_Handled
+
+PortD_Handled:
+	LDR r0, ptr_to_key
+	STRB r3, [r0]
+
+	LDR r0, ptr_to_key_string
+	MOV r1, r3
+	BL int2string
+	BL output_string
+
+	POP {lr}
+	BX lr
+
+UART0_Handler:
+	PUSH {lr}
+
+	MOV r0, #0xC000
+	MOVT r0, #0x4000
+
+	LDR r1, [r0, #UARTICR]
+	ORR r1, r1, #RXIC
+	STR r1, [r0, #UARTICR]
+
+	LDR r1, [r0, #UARTDR]		; Load data from UART reg. to see what key was pressed
+
+
+check_if_start:
+	CMP r1, #START_KEY
+	BNE check_if_exit
+
+	LDR r0, ptr_to_status
+	LDRB r1, [r0]
+	CMP r1, #STATUS_ACTIVE
+	ITE EQ
+	BEQ uart_handled
+	MOVNE r1, #STATUS_ACTIVE
+
+	STRB r1, [r0]
+	B uart_handled
+
+check_if_exit:
+	CMP r1, #EXIT_KEY
+	BNE uart_handled
+
+	LDR r0, ptr_to_status
+	LDRB r1, [r0]
+	CMP r1, #STATUS_ACTIVE
+	ITE NE
+	BNE uart_handled
+	MOVEQ r1, #STATUS_EXIT
+
+	STRB r1, [r0]
+	B uart_handled
+
+uart_handled:
+	POP {lr}
+	BX lr
+
 
 	.end
-
