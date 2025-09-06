@@ -116,13 +116,14 @@ STATUS_MENU:	  .equ 0x000
 STATUS_ACTIVE:	  .equ 0x001
 STATUS_EXIT:	  .equ 0x002
 
-
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START KEYPAD INIT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 keypad_init:
-	PUSH {lr}	; Store register lr on stack
+	PUSH {lr}			
 
 	BL uart_init
 	BL gpio_keypad_init
 
+	; Menu / Instructions
 	LDR r0, ptr_to_start_prompt
 	BL output_string
 
@@ -130,11 +131,15 @@ keypad_init:
 
 	POP {lr}
 	MOV pc, lr
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END KEYPAD INIT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
+
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START KEYPAD PROJECT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 keypad_project:
-	PUSH {lr}	; Store register lr on stack
+	PUSH {lr}
 
-    ; Menu / Instructions
+    ; Ensure that keypad can't interrupt until user begins
     LDR r0, ptr_to_status
 poll_start:
 	LDRB r1, [r0]
@@ -143,20 +148,28 @@ poll_start:
 
 	BL gpio_interrupt_init
 
-	MOV r0, #0x40004000
+	MOV r0, #0x40004000			; Port A base address
+
+	; Check between each scan if user has opted to end
 scan_loop:
 	LDR r1, ptr_to_status
 	LDRB r2, [r1]
 	CMP r2, #STATUS_EXIT
 	BEQ end_scan
 
+	; Test each PA# one at time
+	;	If a key is pressed, a corresponding PD# will
+	;	interrupt and calculate the key that was pressed
+	;	(Based on circuit diagram on pg. 11 of ETUG)
 	LDR r1, ptr_to_scanning
+
 	; Set PA2 high and PA3/4/5 low
 	MOV r3, #PA2
 	STRB r3, [r1]
 	STRB r3, [r0, #GPIODATA]
-	nop
-	nop
+	nop							; ETUG suggests few us delay before testing 
+	nop							; 	i.e., wait to see if interrupted
+								; 	(Two NOPS might be unncessary)
 
 	; Set PA3 high and PA2/4/5 low
 	MOV r3, #PA3
@@ -185,7 +198,11 @@ scan_loop:
 end_scan:
 	POP {lr}
 	MOV pc, lr
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END KEYPAD PROJECT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
+
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START GPIO PORT D HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 GPIO_PortD_Handler:
 	PUSH {lr}
 
@@ -199,10 +216,11 @@ GPIO_PortD_Handler:
 	BIC r1, r1, r1
 	STRB r1, [r0, #GPIOICR]
 
-	 ; Pointer to global data, indicating which column is high
+	; Pointer to global data, indicating which column is logic high
 	LDR r2, ptr_to_scanning
 	LDRB r2, [r2]
 
+	; Keypad # = (PA# - 2) + (PD# * 4)
 	TST r2, #PA2
 	ITT EQ
 	MOVEQ r3, #0x00
@@ -228,8 +246,6 @@ GPIO_PortD_Handler:
 	B PortD_Handled
 
 calculate_key:
-
-	; Key pressed = (PA# - 2) + (PD# * 4)
 	TST r1, #PD0
 	ITT EQ
 	ADDEQ r3, r3, #0x00
@@ -261,7 +277,11 @@ PortD_Handled:
 
 	POP {lr}
 	BX lr
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END GPIO PORT D HANDLER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
+
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART0 HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 UART0_Handler:
 	PUSH {lr}
 
@@ -306,6 +326,7 @@ check_if_exit:
 uart_handled:
 	POP {lr}
 	BX lr
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END UART0 HANDLER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
 	.end
