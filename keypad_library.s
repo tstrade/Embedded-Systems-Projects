@@ -105,13 +105,13 @@ gpio_interrupt_init:
 	PUSH {lr}
 
 	; Enable interrupts for Port D
-    MOV r0, #0x7000			        ;
+    MOV r0, #0x7000			        
     MOVT r0, #0x4000		        ; Port D Base Address
 
 	; Mask interrupt
-	LDRB r1, [r0, #GPIOIM]
-	BIC r1, r1, #0x00F				; Clear bits 0:3 to prevent interrupt during config
-	STRB r1, [r0, #GPIOIM]
+	; LDRB r1, [r0, #GPIOIM]
+	; BIC r1, r1, #0x00F			; Clear bits 0:3 to prevent interrupt during config
+	; STRB r1, [r0, #GPIOIM]
 
     ; Edge sensitive
     LDRB r1, [r0, #GPIOIS]
@@ -125,7 +125,10 @@ gpio_interrupt_init:
 
     ; Falling edge
     LDRB r1, [r0, #GPIOIEV]
-	BIC r1, r1, #0x00F		        ; Clear bits 0:3 for falling-edge interrupts
+	; BIC r1, r1, #0x00F		    ; Clear bits 0:3 for falling-edge interrupts
+
+    ; Maybe should be rising edge since default output is logic low?
+    ORR r1, r1, #0x00F
 	STRB r1, [r0, #GPIOIEV]
 
     ; Enabling interrupt (GPIO)
@@ -134,12 +137,11 @@ gpio_interrupt_init:
 	STRB r1, [r0, #GPIOIM]
 
     ; Enabling interrupt (Proccessor)
-    MOV r0, #0xE000			        ;
+    MOV r0, #0xE000			        
     MOVT r0, #0xE000		        ; EN0 Base Address
-    MOV r2, #0x40000000		        ; Load Ox4000000 (Bit 30) into r2
 
     LDR r1, [r0, #EN0]
-    ORR r1, r1, r2			        ; OR r1 with r2 to set the 30th bit (enable interrupts)
+    ORR r1, r1, #0x008              ; Enable Processor Interrupts for Port D (Bit 3)
     STR r1, [r0, #EN0]
 
 	POP {lr}
@@ -182,10 +184,11 @@ gpio_keypad_init:
     BIC r1, r1, #0x00F
     STR r1, [r0, #GPIOAFSEL]
 
+    ; Code below might be unnecessary
     ; Enable Pull-Down Resistor to ensure default state is logic low
-    LDR r1, [r0, #GPIOPDR]
-    ORR r1, r1, #0x00F
-    STR r1, [r0, #GPIOPDR]
+    ; LDR r1, [r0, #GPIOPDR]
+    ; ORR r1, r1, #0x00F
+    ; STR r1, [r0, #GPIOPDR]
 
     ; Set Digital Enable for Pins 0-3
     LDR r1, [r0, #GPIODEN]
