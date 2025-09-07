@@ -87,8 +87,7 @@ uart_interrupt_init:
     ORR r1, r1, #RXIM               ; Set Receive Interrupt Mask (Bit 4)
     STR r1, [r0, #UARTIM]           ; Store back to UART Interrupt Mask Register
 
-    MOV r0, #0xE000                 ;
-    MOVT r0, #0xE000                ; EN0 Base Address
+    MOV r0, #0xE000E000             ; EN0 Base Address
     LDR r1, [r0, #EN0]              ; Load EN0 Register
     ORR r1, r1, #ENUART0            ; Set UART0 Enable (Bit 4)
     STR r1, [r0, #EN0]              ; Store back to EN0 Register
@@ -137,10 +136,9 @@ gpio_interrupt_init:
 	STRB r1, [r0, #GPIOIM]
 
     ; Enabling interrupt (Proccessor)
-    MOV r0, #0xE000			        
-    MOVT r0, #0xE000		        ; EN0 Base Address
+    MOV r0, #0xE000E000		        ; EN0 Base Address
 
-    LDR r1, [r0, #EN0]
+    LDR r1, [r0, #EN0]              ; (pg. 104 - Vector table; pg. 142 - Reg. Description)
     ORR r1, r1, #0x008              ; Enable Processor Interrupts for Port D (Bit 3)
     STR r1, [r0, #EN0]
 
@@ -173,12 +171,14 @@ gpio_keypad_init:
     MOV r0, #0x7000
     MOVT r0, #0x4000
 
-    ; Configure Pins 0-3 as input
+    ; Configure Pins 0-3 as input (pg. 663)
     LDR r1, [r0, #GPIODIR]
     BIC r1, r1, #0x00F
     STR r1, [r0, #GPIODIR]
 
     ; Set Pins 0-3 as Peripheral w/ Alt. Function Select
+    ; 0 = GPIO; 1 = Peripheral (pg. 672)
+    ; Not sure which one is needed yet, if at all. GPIO should work...?
     LDR r1, [r0, #GPIOAFSEL]
     ;ORR r1, r1, #0x00F
     BIC r1, r1, #0x00F
@@ -190,14 +190,13 @@ gpio_keypad_init:
     ; ORR r1, r1, #0x00F
     ; STR r1, [r0, #GPIOPDR]
 
-    ; Set Digital Enable for Pins 0-3
+    ; Set Digital Enable for Pins 0-3 (pg. 682)
     LDR r1, [r0, #GPIODEN]
     ORR r1, r1, #0x00F
     STR r1, [r0, #GPIODEN]
 
-    ; Configure GPIO Port A (base address = 0x40007000)
-    MOV r0, #0x4000
-    MOVT r0, #0x4000
+    ; Configure GPIO Port A (base address = 0x40004000)
+    MOV r0, #0x40004000
 
     ; Configure Pins 2-5 as output
     LDR r1, [r0, #GPIODIR]
@@ -205,11 +204,13 @@ gpio_keypad_init:
     STR r1, [r0, #GPIODIR]
 
     ; Set Pins 2-5 as GPIO w/ Alt. Function Select
+    ; Might be default setting, but just to be sure
     LDR r1, [r0, #GPIOAFSEL]
     BIC r1, r1, #0x03C
     STR r1, [r0, #GPIOAFSEL]
 
     ; Enable Pull-Down Resistor to ensure default state is logic low
+    ; Might not be necessary?
     LDR r1, [r0, #GPIOPDR]
     ORR r1, r1, #0x03C
     STR r1, [r0, #GPIOPDR]
