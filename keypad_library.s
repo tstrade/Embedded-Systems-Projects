@@ -32,6 +32,7 @@ GPIOIS:		      .equ 0x404	; GPIO Interrupt Sense
 GPIOIBE:	      .equ 0x408	; GPIO Interrupt Both Edges
 GPIOIEV:	      .equ 0x40C	; GPIO Interrupt Event
 GPIOIM:		      .equ 0x410	; GPIO Interrupt Mask
+GPIORIS:		  .equ 0x414	; GPIO Raw Interrupt Status
 GPIOICR:	      .equ 0x41C	; GPIO Interrupt Clear Register
 
 GPIOAFSEL:		  .equ 0x420	; GPIO Alternate Function Select
@@ -42,14 +43,13 @@ GPIOCTL:		  .equ 0x52C	; GPIO Port Control
 GPIORCGC:         .equ 0x608   	; GPIO Run Mode Clock Gating Control
 
 ; GPIO Ports
-PORT_MASK:		  .equ 0x00F
-PORTA_INTMASK: 	  .equ 0x03C
+PORTA_MASK: 	  .equ 0x03C
 PA2:			  .equ 0x004
 PA3:			  .equ 0x008
 PA4:			  .equ 0x010
 PA5:			  .equ 0x020
 
-PORTD_INTMASK:	  .equ 0x00F
+PORTD_MASK:	  	  .equ 0x00F
 PD0:			  .equ 0x001
 PD1:			  .equ 0x002
 PD2:			  .equ 0x004
@@ -64,6 +64,7 @@ UARTLCRH:		  .equ 0x02C	; UART Line Control
 UARTCTL:		  .equ 0x030	; UART Control
 UARTIM:           .equ 0x038	; UART Interrupt Mask
 UARTICR:          .equ 0x044	; UART Interrupt Clear Register
+UARTRCGC:		  .equ 0x618	; UART Run Mode Clock Gating Control
 UARTCC:			  .equ 0xFC8	; UART Clock Configuration
 
 RXIM:             .equ 0x010	; UART Receive Interrupt Mask
@@ -74,6 +75,7 @@ RCGCTIMER:        .equ 0x604	; 16/32-Bit General-Purpose Timer Run Mode Clock Ga
 
 ; Cortex M4 Peripherals
 ENUART0:          .equ 0x020	; UART0 Enable Bit
+ENGPIOD:		  .equ 0x008	; GPIO Port D Enable Bit
 EN0:              .equ 0x100	; Interrupt 0-31 Set Enable
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART INTERRUPT INIT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
@@ -104,42 +106,45 @@ gpio_interrupt_init:
 	PUSH {lr}
 
 	; Enable interrupts for Port D
-    MOV r0, #0x7000			        
+    MOV r0, #0x7000
     MOVT r0, #0x4000		        ; Port D Base Address
 
 	; Mask interrupt
-	; LDRB r1, [r0, #GPIOIM]
-	; BIC r1, r1, #0x00F			; Clear bits 0:3 to prevent interrupt during config
-	; STRB r1, [r0, #GPIOIM]
+	LDR r1, [r0, #GPIOIM]
+	BIC r1, r1, #PORTD_MASK			; Clear bits 0:3 to prevent interrupt during config
+	STR r1, [r0, #GPIOIM]
 
     ; Edge sensitive
-    LDRB r1, [r0, #GPIOIS]
-    BIC r1, r1, #0x00F		        ; Clear bits 0:3 to set edge-sensitive
-	STRB r1, [r0, #GPIOIS]
+    LDR r1, [r0, #GPIOIS]
+    BIC r1, r1, #PORTD_MASK		    ; Clear bits 0:3 to set edge-sensitive
+	STR r1, [r0, #GPIOIS]
 
 	; Single edge triggering
-	LDRB r1, [r0, #GPIOIBE]
-	BIC r1, r1, #0x00F		        ; Clear bits 0:3 to allow GPIOIEV to control
-	STRB r1, [r0, #GPIOIBE]
+	LDR r1, [r0, #GPIOIBE]
+	BIC r1, r1, #PORTD_MASK		    ; Clear bits 0:3 to allow GPIOIEV to control
+	STR r1, [r0, #GPIOIBE]
 
-    ; Falling edge
-    LDRB r1, [r0, #GPIOIEV]
-	; BIC r1, r1, #0x00F		    ; Clear bits 0:3 for falling-edge interrupts
+    ; Rising edge
+    LDR r1, [r0, #GPIOIEV]
+    ORR r1, r1, #PORTD_MASK		; Set bits 0:3 for rising-edge interrupts
+    ;BIC r1, r1, #PORTD_MASK			; Falling edge?
+	STR r1, [r0, #GPIOIEV]
 
-    ; Maybe should be rising edge since default output is logic low?
-    ORR r1, r1, #0x00F
-	STRB r1, [r0, #GPIOIEV]
+	; Clear interrupt status
+	;LDR r1, [r0, #GPIORIS]
+	;BIC r1, r1, #PORTD_MASK
+	;STR r1, [r0, #GPIORIS]
 
     ; Enabling interrupt (GPIO)
-    LDRB r1, [r0, #GPIOIM]
-	ORR r1, r1, #0x00F		        ; Set bits 0:3 to re-enable interrupts
-	STRB r1, [r0, #GPIOIM]
+    LDR r1, [r0, #GPIOIM]
+	ORR r1, r1, #PORTD_MASK		        ; Set bits 0:3 to re-enable interrupts
+	STR r1, [r0, #GPIOIM]
 
     ; Enabling interrupt (Proccessor)
     MOV r0, #0xE000E000		        ; EN0 Base Address
 
     LDR r1, [r0, #EN0]              ; (pg. 104 - Vector table; pg. 142 - Reg. Description)
-    ORR r1, r1, #0x008              ; Enable Processor Interrupts for Port D (Bit 3)
+    ORR r1, r1, #ENGPIOD            ; Enable Processor Interrupts for Port D (Bit 3)
     STR r1, [r0, #EN0]
 
 	POP {lr}
@@ -173,26 +178,17 @@ gpio_keypad_init:
 
     ; Configure Pins 0-3 as input (pg. 663)
     LDR r1, [r0, #GPIODIR]
-    BIC r1, r1, #0x00F
+    BIC r1, r1, #PORTD_MASK
     STR r1, [r0, #GPIODIR]
 
-    ; Set Pins 0-3 as Peripheral w/ Alt. Function Select
-    ; 0 = GPIO; 1 = Peripheral (pg. 672)
-    ; Not sure which one is needed yet, if at all. GPIO should work...?
-    LDR r1, [r0, #GPIOAFSEL]
-    ;ORR r1, r1, #0x00F
-    BIC r1, r1, #0x00F
-    STR r1, [r0, #GPIOAFSEL]
-
-    ; Code below might be unnecessary
     ; Enable Pull-Down Resistor to ensure default state is logic low
-    ; LDR r1, [r0, #GPIOPDR]
-    ; ORR r1, r1, #0x00F
-    ; STR r1, [r0, #GPIOPDR]
+    ;LDR r1, [r0, #GPIOPDR]
+    ;ORR r1, r1, #PORTD_MASK
+    ;STR r1, [r0, #GPIOPDR]
 
     ; Set Digital Enable for Pins 0-3 (pg. 682)
     LDR r1, [r0, #GPIODEN]
-    ORR r1, r1, #0x00F
+    ORR r1, r1, #PORTD_MASK
     STR r1, [r0, #GPIODEN]
 
     ; Configure GPIO Port A (base address = 0x40004000)
@@ -200,27 +196,31 @@ gpio_keypad_init:
 
     ; Configure Pins 2-5 as output
     LDR r1, [r0, #GPIODIR]
-    ORR r1, r1, #0x03C
+    ORR r1, r1, #PORTA_MASK
     STR r1, [r0, #GPIODIR]
 
-    ; Set Pins 2-5 as GPIO w/ Alt. Function Select
-    ; Might be default setting, but just to be sure
+    ; Set Pins 2-5 to use alternate function
+    ; 0 = GPIO; 1 = Peripheral (pg. 672)
     LDR r1, [r0, #GPIOAFSEL]
-    BIC r1, r1, #0x03C
+    BIC r1, r1, #PORTA_MASK
     STR r1, [r0, #GPIOAFSEL]
 
-    ; Enable Pull-Down Resistor to ensure default state is logic low
-    ; Might not be necessary?
-    LDR r1, [r0, #GPIOPDR]
-    ORR r1, r1, #0x03C
-    STR r1, [r0, #GPIOPDR]
+    ; Change Pins 2-5 to GPIO
+    LDR r1, [r0, #GPIOCTL]
+    BFC r1, #0x008, #0x010	; This might be wrong?
+    STR r1, [r0, #GPIOCTL]
+
+    ; Enable Pull-Down Resistor to ensure default state is logic low (pg. 679)
+    ;LDR r1, [r0, #GPIOPDR]
+    ;ORR r1, r1, #PORTA_MASK
+    ;STR r1, [r0, #GPIOPDR]
 
     ; Change is available on second clock cycle (pg. 680)
     ; nop
 
     ; Set Digital Enable for Pins 2-5
     LDR r1, [r0, #GPIODEN]
-    ORR r1, r1, #0x03C
+    ORR r1, r1, #PORTA_MASK
     STR r1, [r0, #GPIODEN]
 
 	POP {lr}
@@ -232,50 +232,66 @@ gpio_keypad_init:
 uart_init:
 	PUSH {lr}
 
-	; Your code for your uart_init routine is placed here
+	; System control register base address in 0x400FE000 (pg. 231)
 	MOV r0, #0xE000
     MOVT r0, #0x400F
-    MOV r1, #0x01
 
-    STR r1, [r0, #0x618]    ; Provide clock to UART0 (0x400FE618 = 1)
-    STR r1, [r0, #0x608]    ; Enable clock to PortA (0x400FE608 = 1)
+	; Enable clock for UART0
+	LDR r1, [r0, #UARTRCGC]
+	ORR r1, r1, #0x001
+    STR r1, [r0, #UARTRCGC]
+
+	; Enable clock for GPIO Port A
+    LDR r1, [r0, #GPIORCGC]
+    ORR r1, r1, #0x001
+    STR r1, [r0, #GPIORCGC]
     nop
     nop
 
-	MOV r2, #0x00
-    MOV r0, #0xC000         ; Moving address to 0x4000C000
+	MOV r0, #0xC000
     MOVT r0, #0x4000
-    STR r2, [r0, #UARTCTL]    ; Disable UART0 Control (0x4000C030 = 0)
 
-    MOV r3, #0x08
-    STR r3, [r0, #UARTIBRD]    ; Set UART0_IBRD_R for 115200 baud (0x4000C024 = 8)
+    ; Disable UART0 Control
+    MOV r1, #0x000
+    STR r1, [r0, #UARTCTL]
 
-    MOV r3, #0x2C
-    STR r3, [r0, #UARTFBRD]    ; Set UART0_FBRD_R for 115200 baud (0x4000C028 = 44)
-    STR r2, [r0, #UARTCC]    ; Use system clock (0x4000CFC8 = 0)
+	; Set UART0_IBRD_R for 115200 baud
+    MOV r1, #0x008
+    STR r1, [r0, #UARTIBRD]
 
-    MOV r3, #0x60
-    STR r3, [r0, #UARTLCRH]    ; Use 8-bit word length, 1 stop bit, no parity (0x4000C02C = 0x60)
+	; Set UART0_FBRD_R for 115200 baud
+    MOV r1, #0x02C
+    STR r1, [r0, #UARTFBRD]
 
-    MOV r3, #0x0301
-    STR r3, [r0, #UARTCTL]    ; Enable UART0 Control (0x4000C030 = 0x301)
+    ; Use system clock
+    MOV r1, #0x000
+    STR r1, [r0, #UARTCC]
 
+	; Use 8-bit word length, 1 stop bit, no parity
+    MOV r1, #0x060
+    STR r1, [r0, #UARTLCRH]
 
-	MOV r0, #0x4000
-	MOVT r0, #0x4000
-    MOV r3, #0x03
-    LDR r2, [r0, #GPIODEN]  	; Load data at 0x4000451C for ORing
-    ORR r2, r2, r3
-    STR r2, [r0, #GPIODEN]  	; Make PA0 and PA1 as Digital Ports (0x4000451C |= 0x03)
+	; Enable UART0 Control
+	MOV r1, #0x301
+    STR r1, [r0, #UARTCTL]
 
-    LDR r2, [r0, #GPIOAFSEL]  	; Load data at 0x40004420 for ORing
-    ORR r2, r2, r3
-    STR r2, [r0, #GPIOAFSEL]  	; Change PA0,PA1 to use an alternate function (0x40004420 |= 0x03)
+	; Port A base address
+	MOV r0, #0x40004000
 
-    MOV r3, #0x11
-    LDR r2, [r0, #GPIOCTL]  	; Load data at 0x4000452C for ORing
-    ORR r2, r2, r3
-    STR r2, [r0, #GPIOCTL]  	; Configure PA0 and PA1 for UART (0x4000452C |= 0x11)
+    ; Make PA0 and PA1 as Digital Ports
+    LDR r1, [r0, #GPIODEN]
+    ORR r1, r1, #0x003
+    STR r1, [r0, #GPIODEN]
+
+	; Change PA0 and PA1 to use an alternate function
+    LDR r1, [r0, #GPIOAFSEL]
+    ORR r1, r1, #0x003
+    STR r1, [r0, #GPIOAFSEL]
+
+    ; Configure PA0 and PA1 for UART
+    LDR r1, [r0, #GPIOCTL]
+    ORR r1, r1, #0x011
+    STR r1, [r0, #GPIOCTL]
 
 	POP {lr}
 	MOV pc, lr
@@ -552,4 +568,3 @@ newline:
 
 
 	.end
-
