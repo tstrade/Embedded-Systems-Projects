@@ -70,7 +70,6 @@ UARTCC:			  .equ 0xFC8	; UART Clock Configuration
 RXIM:             .equ 0x010	; UART Receive Interrupt Mask
 RXIC:             .equ 0x010	; UART Receive Raw Interrupt Status
 
-
 RCGCTIMER:        .equ 0x604	; 16/32-Bit General-Purpose Timer Run Mode Clock Gating Control
 
 ; Cortex M4 Peripherals
@@ -126,18 +125,12 @@ gpio_interrupt_init:
 
     ; Rising edge
     LDR r1, [r0, #GPIOIEV]
-    ORR r1, r1, #PORTD_MASK		; Set bits 0:3 for rising-edge interrupts
-    ;BIC r1, r1, #PORTD_MASK			; Falling edge?
+    ORR r1, r1, #PORTD_MASK			; Set bits 0:3 for rising-edge interrupts
 	STR r1, [r0, #GPIOIEV]
-
-	; Clear interrupt status
-	;LDR r1, [r0, #GPIORIS]
-	;BIC r1, r1, #PORTD_MASK
-	;STR r1, [r0, #GPIORIS]
 
     ; Enabling interrupt (GPIO)
     LDR r1, [r0, #GPIOIM]
-	ORR r1, r1, #PORTD_MASK		        ; Set bits 0:3 to re-enable interrupts
+	ORR r1, r1, #PORTD_MASK		    ; Set bits 0:3 to re-enable interrupts
 	STR r1, [r0, #GPIOIM]
 
     ; Enabling interrupt (Proccessor)
@@ -182,9 +175,9 @@ gpio_keypad_init:
     STR r1, [r0, #GPIODIR]
 
     ; Enable Pull-Down Resistor to ensure default state is logic low
-    ;LDR r1, [r0, #GPIOPDR]
-    ;ORR r1, r1, #PORTD_MASK
-    ;STR r1, [r0, #GPIOPDR]
+    LDR r1, [r0, #GPIOPDR]
+    ORR r1, r1, #PORTD_MASK
+    STR r1, [r0, #GPIOPDR]
 
     ; Set Digital Enable for Pins 0-3 (pg. 682)
     LDR r1, [r0, #GPIODEN]
@@ -207,16 +200,11 @@ gpio_keypad_init:
 
     ; Change Pins 2-5 to GPIO
     LDR r1, [r0, #GPIOCTL]
-    BFC r1, #0x008, #0x010	; This might be wrong?
+    BFC r1, #0x008, #0x010
     STR r1, [r0, #GPIOCTL]
 
-    ; Enable Pull-Down Resistor to ensure default state is logic low (pg. 679)
-    ;LDR r1, [r0, #GPIOPDR]
-    ;ORR r1, r1, #PORTA_MASK
-    ;STR r1, [r0, #GPIOPDR]
-
     ; Change is available on second clock cycle (pg. 680)
-    ; nop
+    nop
 
     ; Set Digital Enable for Pins 2-5
     LDR r1, [r0, #GPIODEN]
