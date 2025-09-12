@@ -1,0 +1,61 @@
+  .text
+
+ref_string:    .string "9999999999999999999999", 0
+tmp_string:    .string "0000000000000000000000", 0
+sp_string:     .string "x1.0000000000000000000000", 0
+
+sign:      .byte 0x0
+exponent:  .hword 0x0000
+
+  .data
+  .global float2string
+  .global int2string
+  .global string2int
+
+; SINGLE-PRECISION FORMAT
+; 
+; | 1-Bit Sign | 8-Bit Exponent | 23-Bit Mantissa |
+
+ptr_to_ref_string: .word ref_string
+ptr_to_tmp_string: .word tmp_string
+ptr_to_sp_string:  .word sp_string
+ptr_to_sign:       .word sign
+ptr_to_exponent:   .word exponent
+
+EXPO_SP_MASK:      .equ 0x0FF ; 8-bit mask
+SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
+EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
+EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
+
+; r0 = floating point number
+; r1 = address of string
+float2string:
+  PUSH {r3-r5, lr}
+
+  ; Store in case needed later
+  MOV r4, r0
+  MOV r5, r1 
+
+  ; Store sign of floating point
+  LDR r2, ptr_to_sign
+  SLR r3, r0, #SIGN_SP_SHIFT
+  STRB r3, [r2]
+
+  ; Store exponent of floating point
+  LDR r2, ptr_to_exponent
+  SLR r3, r0, #EXPO_SP_SHIFT
+  AND r3, r3, #EXPO_SP_MASK
+  SUB r3, r3, #EXPO_SP_BIAS
+  STR r3, [r2]  
+
+  ; Isolate fraction
+  BFC r0, #0x017, #0x009
+  LDR r1, ptr_to_tmp_string
+  BL bit2string
+
+  
+  
+
+  POP {pc}
+
+  .end
