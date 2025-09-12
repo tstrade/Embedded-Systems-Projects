@@ -5,12 +5,25 @@ reply_string: 	.string "You pressed key #", 0
 key_string:  	.string "xx", 0
 end_prompt:		.string 0xD, 0xA, 0x9, 0x9, 0x9, 0x9, 0x9, "Goodbye!", 0
 
+ref_string:    .string "9999999999999999999999", 0
+tmp_string:    .string "0000000000000000000000", 0
+sp_string:     .string "x1.0000000000000000000000", 0
+
+bit_string:	   .string "00000000000000000000000000000000", 0
+
+sign:      	.byte 0x0
+exponent:  	.short 0x0000
+
 key:		.byte 0x00
 status:		.byte 0x00
 
 	.text
 	.global fpu_init
 	.global fpu_project
+	.global float2string
+	.global string2float
+	.global bit2string
+	.global string2bit
 	.global keypad_project
 	.global uart_interrupt_init
     .global gpio_interrupt_init
@@ -34,6 +47,13 @@ ptr_to_start_prompt: 	.word start_prompt
 ptr_to_reply_string:	.word reply_string
 ptr_to_key_string:		.word key_string
 ptr_to_end_prompt:		.word end_prompt
+
+ptr_to_bit_string:		.word bit_string
+ptr_to_ref_string: 		.word ref_string
+ptr_to_tmp_string: 		.word tmp_string
+ptr_to_sp_string:  		.word sp_string
+ptr_to_sign:       		.word sign
+ptr_to_exponent:   		.word exponent
 
 ptr_to_key:				.word key
 ptr_to_status:			.word status
@@ -173,6 +193,11 @@ FPDSCR:  .equ 0xF3C    ; Floating-Point Default Status Control (pg. 199)
 
 ; Enabling FPU (pg. 134):
 
+EXPO_SP_MASK:      .equ 0x0FF ; 8-bit mask
+SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
+EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
+EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
+
 fpu_init:
   PUSH {lr}
 
@@ -195,6 +220,11 @@ fpu_init:
 fpu_project:
 	PUSH {lr}
 
+	BL uart_init
+
+	MOV r0, #0x00C
+	BL output_character
+
 	; 7.2
 	MOV r0, #0x6666
 	MOVT r0, #0x40E6
@@ -209,6 +239,13 @@ fpu_project:
 
 	; Floating-point Add
 	VADD.F32 s2, s0, s1
+
+	VMOV r0, s2
+	LDR r1, ptr_to_bit_string
+	BL bit2string
+
+	LDR r0, ptr_to_bit_string
+	BL output_string
 
 	POP {pc}
 
@@ -253,7 +290,33 @@ end_scan:
 	MOV pc, lr
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END KEYPAD PROJECT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
+; r0 = floating point number
+; r1 = address of string
+float2string:
+  PUSH {r3-r5, lr}
 
+  ; Store in case needed later
+  MOV r4, r0
+  MOV r5, r1
+
+  ; Store sign of floating point
+  LDR r2, ptr_to_sign
+  SLR r3, r0, #SIGN_SP_SHIFT
+  STRB r3, [r2]
+
+  ; Store exponent of floating point
+  LDR r2, ptr_to_exponent
+  SLR r3, r0, #EXPO_SP_SHIFT
+  AND r3, r3, #EXPO_SP_MASK
+  SUB r3, r3, #EXPO_SP_BIAS
+  STR r3, [r2]
+
+  ; Isolate fraction
+  BFC r0, #0x017, #0x009
+  LDR r1, ptr_to_tmp_string
+  BL bit2string
+
+  POP {pc}
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START GPIO PORT D HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 GPIO_PortD_Handler:
