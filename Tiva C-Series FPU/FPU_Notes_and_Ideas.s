@@ -27,6 +27,8 @@ SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
 EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
 EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
 
+ASCII_ZERO:        .equ 0x030
+
 ; r0 = floating point number
 ; r1 = address of string
 float2string:
@@ -53,9 +55,32 @@ float2string:
   LDR r1, ptr_to_tmp_string
   BL bit2string
 
-  
-  
-
   POP {pc}
+
+find_decimals:
+  PUSH {r4-r5, lr}
+
+  ; r0 is the address of the bit string
+  ; r1 is the address of the reference string
+  ; r2 is the first byte of the bit string
+  ; r3 is the first byte of the reference string
+
+MOV r4, #0x001
+
+decimal_loop:
+  MUL r4, r4, #0x005
+
+  ; Skip if 
+  LDRB r2, [r0]
+  CMP r2, #ASCII_ZERO
+  BEQ decimal_loop
+  
+  LDRB r3, [r1]
+  
+  ; Can possibly use our division routine 
+  ; to take advantage of return values
+  ;   (quotient and remainder)
+
+  POP {r4-r5, pc}
 
   .end
