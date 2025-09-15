@@ -1,41 +1,15 @@
   .text
 
-ref_string:    .string "9999999999999999999999", 0
-tmp_string:    .string "0000000000000000000000", 0
-sp_string:     .string "x1.0000000000000000000000", 0
+empty_string:  .string "0.00000000000000000000000", 0
+pow_3:         .string "0.12500000000000000000000", 0
+pow_4:         .string "0.06250000000000000000000", 0
+pow_8:         .string "0.00390625000000000000000", 0
+pow_12:        .string "0.00024414062500000000000", 0
+pow_16:        .string "0.00000152587890625000000", 0
+pow_20:        .string "0.00000095367431640625000", 0
+pow_24:        .string "0.00000005960464477539063", 0
 
-; Pain
-one:       .string "0.50000000000000000000000", 0
-two:       .string "0.25000000000000000000000", 0
-three:     .string "0.12500000000000000000000", 0
-
-four:      .string "0.06250000000000000000000", 0
-five:      .string "0.03125000000000000000000", 0
-six:       .string "0.01562500000000000000000", 0
-
-seven:     .string "0.00781250000000000000000", 0
-eight:     .string "0.00390625000000000000000", 0
-nine:      .string "0.00195312500000000000000", 0
-
-ten:       .string "0.00097656250000000000000", 0
-eleven:    .string "0.00048828125000000000000", 0
-twelve:    .string "0.00024414062500000000000", 0
-thirteen:  .string "0.00012207031250000000000", 0
-
-fourteen:  .string "0.00006103515625000000000", 0
-fifteen:   .string "0.00003051757812500000000", 0
-sixteen:   .string "0.00001525878906250000000", 0
-
-seventeen: .string "0.00000762939453125000000", 0
-eighteen:  .string "0.00000381469726562500000", 0
-nineteen:  .string "0.00000190734863281250000", 0
-
-twenty:    .string "0.00000095367431640625000", 0
-tw_one:    .string "0.00000047683715820312500", 0
-tw_two:    .string "0.00000023841857910156250", 0
-tw_three:  .string "0.00000011920928955078125", 0
-
-max:       .string "0.99999988079071044921875", 0
+max:           .string "0.99999988079071044921875", 0
 
 
 sign:      .byte 0x0
@@ -61,7 +35,88 @@ SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
 EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
 EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
 
+ASCII_POINT:       .equ 0x02E
 ASCII_ZERO:        .equ 0x030
+ASCII_ONE:         .equ 0x031
+ASCII_NINE:        .equ 0x039
+POW_OFFSET:        .equ 0x018 ; Number of bytes to last possible digit in string
+
+simple_add_ascii:
+  PUSH {lr}
+  
+  ; r0 = first ascii value
+  ; r1 = second ascii value
+  ; r2 = carry-in value
+  ADD r0, r0, r1
+  SUB r0, r0, #ASCII_ZERO
+
+  CMP r0, #ASCII_NINE
+  ITTE GT
+  SUBGT r0, r0, #0x00A
+  MOVGT r1, #ASCII_ONE
+  MOVLE r1, #ASCII_ZERO
+
+  ADD r0, r0, r2
+  SUB r0, r0, #ASCII_ZERO
+  
+  ; Returns sum and carry-out, if applicable
+  POP {pc}
+
+
+single_precision_add_ascii:
+  PUSH {r4-r5, lr}
+  ; r0 = base address of first string
+  ; r1 = base address of second string
+  ADD r4, r0, #POW_OFFSET  ; These might need to be sub I forgot 
+  ADD r5, r1, #POW_OFFSET  ; what endianness tiva uses
+
+  MOV r2, #ASCII_ZERO      ; First carry-in value should be zero
+
+  ; Load least significant byte of each string 
+  ;  until the decimal point is reached
+sp_add_ascii_loop:
+  LDRB r0, [r4]
+  CMP r0, #ASCII_POINT
+  BEQ sp_add_ascii_end
+  
+  LDRB r1, [r5], #-0x001
+
+  ; Add and store sum / carry-out value
+  BL simple_add_ascii
+
+  MOV r2, r1 
+  STRB r0, [r4], #-0x001
+
+  B sp_add_ascii_loop  
+
+sp_add_ascii_end:
+  POP {r4-r5, pc}
+
+
+
+
+single_precision_mul_ascii:
+  PUSH {r4-r5, lr}
+  ; r0 = base address of string to multiply
+  ; r1 = multiplier
+  MOV r4, r0
+  MOV r5, r1
+
+sp_mul_loop:
+  SUBS r5, r5, #0x001
+  BLT sp_mul_end
+
+  MOV r0, r4
+  MOV r1, r4
+  BL single_precision_add_ascii
+
+  B sp_mul_loop
+  
+sp_mul_end:
+  POP {r4-r5, pc}
+
+
+
 
 ; r0 = floating point number
 ; r1 = address of string
@@ -77,6 +132,7 @@ float2string:
   SLR r3, r0, #SIGN_SP_SHIFT
   STRB r3, [r2]
 
+; Should use the exponent on the mantissa before isolating 
   ; Store exponent of floating point
   LDR r2, ptr_to_exponent
   SLR r3, r0, #EXPO_SP_SHIFT
@@ -89,32 +145,20 @@ float2string:
   LDR r1, ptr_to_tmp_string
   BL bit2string
 
-  POP {pc}
+; We essentially want:
+:   First "byte" <= "8" -> add pow_4 "byte" times
+;        else add pow_4 8 times and pow_3 8 - "byte" times
+;
+;  After that each byte can be added in a more normal fashion
+;
+;    e.g., Second "byte" -> add pow_8 "byte" times
+;          Third "byte" -> add pow_12 "byte" times
+;          etc.
 
-find_decimals:
-  PUSH {r4-r5, lr}
-
-  ; r0 is the address of the bit string
-  ; r1 is the address of the reference string
-  ; r2 is the first byte of the bit string
-  ; r3 is the first byte of the reference string
-
-MOV r4, #0x001
-
-decimal_loop:
-  MUL r4, r4, #0x005
-
-  ; Skip if 
-  LDRB r2, [r0]
-  CMP r2, #ASCII_ZERO
-  BEQ decimal_loop
-  
+  ; Start decoding bit string
+decode_bit_string:
   LDRB r3, [r1]
+  CMP r3, #ASCII_ONE
   
-  ; Can possibly use our division routine 
-  ; to take advantage of return values
-  ;   (quotient and remainder)
 
-  POP {r4-r5, pc}
-
-  .end
+  POP {r3-r5, pc}
