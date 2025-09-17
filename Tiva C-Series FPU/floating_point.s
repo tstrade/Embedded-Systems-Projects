@@ -5,11 +5,22 @@ reply_string: 	.string "You pressed key #", 0
 key_string:  	.string "xx", 0
 end_prompt:		.string 0xD, 0xA, 0x9, 0x9, 0x9, 0x9, 0x9, "Goodbye!", 0
 
-ref_string:    .string "9999999999999999999999", 0
-tmp_string:    .string "0000000000000000000000", 0
-sp_string:     .string "x1.0000000000000000000000", 0
+ref_string:    	.string "9999999999999999999999", 0
+tmp_string:    	.string "0000000000000000000000", 0
+sp_string:     	.string "x1.0000000000000000000000", 0
 
-bit_string:	   .string "00000000000000000000000000000000", 0
+bit_string:	   	.string "00000000000000000000000000000000", 0
+
+frac_string:   .string "0.00000000000000000000000", 0
+pow_3:         .string "0.12500000000000000000000", 0
+pow_4:         .string "0.06250000000000000000000", 0
+pow_8:         .string "0.00390625000000000000000", 0
+pow_12:        .string "0.00024414062500000000000", 0
+pow_16:        .string "0.00000152587890625000000", 0
+pow_20:        .string "0.00000095367431640625000", 0
+pow_24:        .string "0.00000005960464477539063", 0
+
+max_frac:      .string "0.99999988079071044921875", 0
 
 sign:      	.byte 0x0
 exponent:  	.short 0x0000
@@ -24,6 +35,7 @@ status:		.byte 0x00
 	.global string2float
 	.global bit2string
 	.global string2bit
+
 	.global keypad_project
 	.global uart_interrupt_init
     .global gpio_interrupt_init
@@ -40,6 +52,11 @@ status:		.byte 0x00
 	.global multiplication
 	.global newline
 
+	.global simple_add_ascii
+	.global single_precision_add_ascii
+	.global single_precision_mul_ascii
+	.global decode_fraction
+
 	.global UART0_Handler
 	.global GPIO_PortD_Handler
 
@@ -52,6 +69,15 @@ ptr_to_bit_string:		.word bit_string
 ptr_to_ref_string: 		.word ref_string
 ptr_to_tmp_string: 		.word tmp_string
 ptr_to_sp_string:  		.word sp_string
+ptr_to_frac_string:		.word frac_string
+ptr_to_pow_3:			.word pow_3
+ptr_to_pow_4:			.word pow_4
+ptr_to_pow_8:			.word pow_8
+ptr_to_pow_12:			.word pow_12
+ptr_to_pow_16:			.word pow_16
+ptr_to_pow_20:			.word pow_20
+ptr_to_pow_24:			.word pow_24
+ptr_to_max_frac:		.word max_frac
 ptr_to_sign:       		.word sign
 ptr_to_exponent:   		.word exponent
 
@@ -198,6 +224,12 @@ SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
 EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
 EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
 
+ASCII_POINT:       .equ 0x02E
+ASCII_ZERO:        .equ 0x030
+ASCII_ONE:         .equ 0x031
+ASCII_NINE:        .equ 0x039
+POW_OFFSET:        .equ 0x018 ; Number of bytes to last possible digit in string
+
 fpu_init:
   PUSH {lr}
 
@@ -241,11 +273,12 @@ fpu_project:
 	VADD.F32 s2, s0, s1
 
 	VMOV r0, s2
-	LDR r1, ptr_to_bit_string
-	BL bit2string
+	BL float2string
 
-	LDR r0, ptr_to_bit_string
+	LDR r0, ptr_to_frac_string
 	BL output_string
+
+
 
 	POP {pc}
 
@@ -293,30 +326,29 @@ end_scan:
 ; r0 = floating point number
 ; r1 = address of string
 float2string:
-  PUSH {r3-r5, lr}
+  	PUSH {r3-r5, lr}
 
-  ; Store in case needed later
-  MOV r4, r0
-  MOV r5, r1
+  	; Store in case needed later
+  	MOV r4, r0
+  	MOV r5, r1
 
-  ; Store sign of floating point
-  LDR r2, ptr_to_sign
-  SLR r3, r0, #SIGN_SP_SHIFT
-  STRB r3, [r2]
+  	; Store sign of floating point
+  	LDR r2, ptr_to_sign
+  	LSR r3, r0, #SIGN_SP_SHIFT
+  	STRB r3, [r2]
 
-  ; Store exponent of floating point
-  LDR r2, ptr_to_exponent
-  SLR r3, r0, #EXPO_SP_SHIFT
-  AND r3, r3, #EXPO_SP_MASK
-  SUB r3, r3, #EXPO_SP_BIAS
-  STR r3, [r2]
+  	; Store exponent of floating point
+  	LDR r2, ptr_to_exponent
+  	LSR r3, r0, #EXPO_SP_SHIFT
+  	AND r3, r3, #EXPO_SP_MASK
+  	SUB r3, r3, #EXPO_SP_BIAS
+  	STR r3, [r2]
 
-  ; Isolate fraction
-  BFC r0, #0x017, #0x009
-  LDR r1, ptr_to_tmp_string
-  BL bit2string
+  	; Isolate fraction
+  	BFC r0, #0x017, #0x009
+	BL decode_fraction
 
-  POP {pc}
+  	POP {r3-r5,pc}
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START GPIO PORT D HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 GPIO_PortD_Handler:
@@ -512,6 +544,70 @@ uart_handled:
 	POP {lr}
 	BX lr
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END UART0 HANDLER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
+
+
+decode_fraction:
+	PUSH {r4-r5, lr}
+	; r0 = floating point fraction to decode
+
+	MOV r4, r0
+	MOV r5, #0x006
+
+decode_loop:
+	SUBS r5, r5, #0x001
+	BLT decode_end
+
+	ANDS r2, r4, #0x00F
+	LSR r4, r4, #0x004
+	BEQ decode_loop
+
+case_pow_24:
+	CMP r5, #0x005
+	BNE case_pow_20
+
+	LDR r1, ptr_to_pow_24
+	B add_frac
+
+case_pow_20:
+	CMP r5, #0x004
+	BNE case_pow_16
+
+	LDR r1, ptr_to_pow_20
+	B add_frac
+
+case_pow_16:
+	CMP r5, #0x003
+	BNE case_pow_12
+
+	LDR r1, ptr_to_pow_16
+	B add_frac
+
+case_pow_12:
+	CMP r5, #0x002
+	BNE case_pow_8
+
+	LDR r1, ptr_to_pow_12
+	B add_frac
+
+case_pow_8:
+	CMP r5, #0x001
+	BNE case_pow_4
+
+	LDR r1, ptr_to_pow_8
+	B add_frac
+
+case_pow_4:
+	LDR r1, ptr_to_pow_4
+
+add_frac:
+	LDR r0, ptr_to_frac_string
+	BL single_precision_mul_ascii
+
+	B decode_loop
+
+decode_end:
+	POP {r4-r5, pc}
+
 
 
 	.end
