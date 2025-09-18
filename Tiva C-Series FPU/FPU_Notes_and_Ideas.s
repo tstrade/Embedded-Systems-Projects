@@ -39,6 +39,7 @@ ASCII_POINT:       .equ 0x02E
 ASCII_ZERO:        .equ 0x030
 ASCII_ONE:         .equ 0x031
 ASCII_NINE:        .equ 0x039
+ASCII_CARRY_IN:    .equ 0x03A
 POW_OFFSET:        .equ 0x018 ; Number of bytes to last possible digit in string
 
 simple_add_ascii:
@@ -162,3 +163,90 @@ decode_bit_string:
   
 
   POP {r3-r5, pc}
+
+
+
+  simple_sub_ascii:
+    PUSH (lr}
+
+    ; r0 = first ascii value
+    ; r1 = second ascii value
+    ; r2 = carry-out value
+
+    ; Assume difference = (r0 - r1) - r2
+    SUBS r0, r0, r1
+
+    ; r0 = difference, r1 = carry-in from next significant value
+    ITEE GE
+    MOVGE r1, #ASCII_ZERO
+    MOVLT r1, #ASCII_ONE
+    ADDLT r0, r0, #ASCII_COLON
+
+    ; Adjust for ASCII math
+    ADD r0, r0, #ASCII_ZERO 
+
+    ; Subtract carry-out value
+    SUBS r0, r0, r2
+
+    ITT LT
+    MOVLT r1, #ASCII_ONE
+    ADDLT r0, r0, #ASCII_COLON
+
+    ADD r0, r0, #ASCII_ZERO
+
+    ; Returns sum and carry-out, if applicable
+    POP {pc}
+
+single_precision_sub_ascii:
+    PUSH {r4-r5, lr}
+    ; r0 = base address of first string
+    ; r1 = base address of second string
+    ADD r4, r0, #POW_OFFSET
+    ADD r5, r1, #POW_OFFSET
+
+    MOV r2, #ASCII_ZERO    ; First carry-out value should be zero
+
+    ; Load least significant byte of each string
+    ;  until the decimal point is reached
+  sp_sub_ascii_loop:
+    LDRB r0, [r4]
+    CMP r0, #ASCII_POINT
+    BEQ sp_sub_ascii_end
+
+    LDRB r1, [r5], #-0x001
+
+    ; Add and store difference / carry-in value
+    BL simple_sub_ascii
+
+    MOV r1, r2
+    STRB r0, [r4], #-0x001
+
+    B sp_sub_ascii_loop
+
+sp_sub_ascii_loop:
+    POP {r4-r5, pc}
+
+
+single_precision_div_ascii:
+    PUSH {r4-r6, lr}
+    ; r0 = base address of string to store result
+    ; r1 = base address of string to divide
+    ; r2 = divisor
+    MOV r4, r0
+    MOV r5, r1
+    MOV r6, r2
+
+sp_div_loop:
+    SUBS r6, r6, #0x001
+    BLT sp_div_end
+
+    MOV r0, r4
+    MOV r1, r5
+    BL single_precision_sub_ascii
+
+   B sp_div_loop
+
+sp_mul_end:
+    POP {r4-r6, pc}
+    
+    .end
