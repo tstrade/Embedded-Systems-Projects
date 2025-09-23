@@ -315,7 +315,7 @@ float2string:
 string2float:
 	PUSH {r4, lr}
 
-	; r0 = pointer to fp string
+	; r0 = address of fp string
 
 	; Once the radix point is found, we will
 	; 	insert a null byte to split the 
@@ -359,6 +359,27 @@ find_frac_size:
 
 
 
+float2string:
+	PUSH {lr}
+
+	; r0 = fp to convert
+	; r1 = address of fp string
+
+	; Check bits from right to left?
+	; Skip through list sig 0s
+	; 	and start counting how much to 
+	;	multiply to get integer version
+	;
+	; Might want global value of number
+	;	of how many decimal places are
+	;	needed, defined by user input	
+
+
+
+	; r0 = address of fp string
+
+
+	POP {pc}
 
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART0 HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
