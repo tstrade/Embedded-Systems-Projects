@@ -1,23 +1,18 @@
 	.data
 
-start_prompt: 	.string 0xC, 0xD, 0xA, 0x9, 0x9, 0x9, 0x9, "Welcome to the Keypad Project!", 0xD, 0xA, 0x9, 0x9, "Press space to start the program. Press 'x' at anytime to quit.", 0xD, 0xA, 0
-reply_string: 	.string "You pressed key #", 0
-key_string:  	.string "xx", 0
-end_prompt:		.string 0xD, 0xA, 0x9, 0x9, 0x9, 0x9, 0x9, "Goodbye!", 0
+temp_int_string:	.string "000000000000000000", 0
+temp_frac_string:	.string "000000000000000000", 0
+temp_fp_string:		.string "000000000000000000000000000000000000", 0
 
-temp_string:	.string "000000000000000000", 0
-
-sign:      	.byte 0x0
-exponent:  	.short 0x0000
-
-key:		.byte 0x00
-status:		.byte 0x00
+sign:      		.byte 0x00
+exponent:  		.byte 0x00
 
 	.text
 	.global fpu_init
 	.global fpu_project
 	.global float2string
 	.global string2float
+	.global append_string
 
 	.global uart_interrupt_init
 	.global uart_init
@@ -34,18 +29,11 @@ status:		.byte 0x00
 
 	.global UART0_Handler
 
-
-ptr_to_start_prompt: 	.word start_prompt
-ptr_to_reply_string:	.word reply_string
-ptr_to_key_string:		.word key_string
-ptr_to_end_prompt:		.word end_prompt
-
-ptr_to_temp_string:		.word temp_string
-ptr_to_sign:       		.word sign
-ptr_to_exponent:   		.word exponent
-
-ptr_to_key:				.word key
-ptr_to_status:			.word status
+ptr_to_temp_int_string:		.word temp_int_string
+ptr_to_temp_frac_string:	.word temp_frac_string
+ptr_to_temp_fp_string:		.word temp_fp_string
+ptr_to_sign:       			.word sign
+ptr_to_exponent:   			.word exponent
 
 ; GENERAL KEYPAD LAYOUT
 ;
@@ -85,27 +73,6 @@ GPIODEN:          .equ 0x51C	; GPIO Digital Register
 GPIOCTL:		  .equ 0x52C	; GPIO Port Control
 GPIORCGC:         .equ 0x608   	; GPIO Run Mode Clock Gating Control
 
-; GPIO Ports
-PORTA_MASK: 	  .equ 0x03C
-PA2:			  .equ 0x004
-PA3:			  .equ 0x008
-PA4:			  .equ 0x010
-PA5:			  .equ 0x020
-PA2_ADJUSTED:	  .equ 0x000
-PA3_ADJUSTED:	  .equ 0x001
-PA4_ADJUSTED:	  .equ 0x002
-PA5_ADJUSTED:	  .equ 0x003
-
-PORTD_MASK:	  	  .equ 0x00F
-PD0:			  .equ 0x001
-PD1:			  .equ 0x002
-PD2:			  .equ 0x004
-PD3:			  .equ 0x008
-PD0_ADJUSTED:	  .equ 0x000
-PD1_ADJUSTED:	  .equ 0x004
-PD2_ADJUSTED:	  .equ 0x008
-PD3_ADJUSTED:	  .equ 0x00C
-
 ; Universal Asynchronous Receiver/Transmitters
 UARTDR:			  .equ 0x000	; UART Data Register
 U0FR: 			  .equ 0x018	; UART0 Flag Register
@@ -128,13 +95,6 @@ RCGCTIMER:        .equ 0x604	; 16/32-Bit General-Purpose Timer Run Mode Clock Ga
 ENUART0:          .equ 0x020	; UART0 Enable Bit
 ENGPIOD:		  .equ 0x008	; GPIO Port D Enable Bit
 EN0:              .equ 0x100	; Interrupt 0-31 Set Enable
-
-; Program-specific Constants
-START_KEY:		  .equ 0x020
-EXIT_KEY:		  .equ 0x078
-STATUS_MENU:	  .equ 0x000
-STATUS_ACTIVE:	  .equ 0x001
-STATUS_EXIT:	  .equ 0x002
 
 
 ; FPU Registers - Base Addr. = 0xE000E000 (pg. 194)
@@ -187,10 +147,22 @@ SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
 EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
 EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
 
+ASCII_TIMES:	   .equ 0x02A
+ASCII_PLUS:		   .equ 0x02B
 ASCII_POINT:       .equ 0x02E
+ASCII_MINUS:	   .equ 0x02D
+ASCII_DIVIDE:	   .equ 0x02F
 ASCII_ZERO:        .equ 0x030
 ASCII_NINE:        .equ 0x039
 
+; Extended ASCII might not be supported by PuTTy
+ASCII_SQRT:		   .equ 0x0FB
+
+
+NULL:			   .equ 0x000
+
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START FPU INIT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 fpu_init:
   PUSH {lr}
 
@@ -209,7 +181,11 @@ fpu_init:
   ISB
 
   POP {pc}
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END FPU INIT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
+
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START FPU PROJECT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 fpu_project:
 	PUSH {lr}
 
@@ -242,76 +218,11 @@ fpu_project:
 
 
 	POP {pc}
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END FPU PROJECT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
-	; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START KEYPAD PROJECT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
-keypad_project:
-	PUSH {lr}
 
-    ; Ensure that keypad cant interrupt until user begins
-    LDR r0, ptr_to_status
-poll_start:
-	LDRB r1, [r0]
-	CMP r1, #STATUS_ACTIVE
-	BLT poll_start
-
-	; Drive Port A pins high to allow handler to do the scanning
-	MOV r0, #0x40004000
-	LDR r1, [r0, #GPIODATA_A]
-	ORR r1, r1, #PORTA_MASK
-	STR r1, [r0, #GPIODATA_A]
-
-	BL gpio_interrupt_init
-
-	BL newline
-	BL newline
-
-	; Check between each scan if user has opted to end
-scan_loop:
-	LDR r1, ptr_to_status
-	LDRB r2, [r1]
-	CMP r2, #STATUS_EXIT
-	BEQ end_scan
-
-	B scan_loop
-
-
-end_scan:
-	LDR r0, ptr_to_end_prompt
-	BL output_string
-
-	POP {lr}
-	MOV pc, lr
-; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END KEYPAD PROJECT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
-
-; r0 = floating point number
-; r1 = address of string
-float2string:
-  	PUSH {r3-r5, lr}
-
-  	; Store in case needed later
-  	MOV r4, r0
-  	MOV r5, r1
-
-  	; Store sign of floating point
-  	LDR r2, ptr_to_sign
-  	LSR r3, r0, #SIGN_SP_SHIFT
-  	STRB r3, [r2]
-
-  	; Store exponent of floating point
-  	LDR r2, ptr_to_exponent
-  	LSR r3, r0, #EXPO_SP_SHIFT
-  	AND r3, r3, #EXPO_SP_MASK
-  	SUB r3, r3, #EXPO_SP_BIAS
-  	STR r3, [r2]
-
-  	; Isolate fraction
-  	BFC r0, #0x017, #0x009
-	BL decode_fraction
-
-  	POP {r3-r5,pc}
-
-
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START STRING2FLOAT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 string2float:
 	PUSH {r4, lr}
 
@@ -356,30 +267,117 @@ find_frac_size:
 	; r0 = fp value
 
 	POP {r4, pc}
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END STRING2FLOAT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
 
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START FLOAT2STRING >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 float2string:
-	PUSH {lr}
+	PUSH {r4-r5, lr}
 
 	; r0 = fp to convert
 	; r1 = address of fp string
+	MOV r4, r0
+	MOV r5, r1
 
-	; Check bits from right to left?
-	; Skip through list sig 0s
-	; 	and start counting how much to 
-	;	multiply to get integer version
-	;
-	; Might want global value of number
-	;	of how many decimal places are
-	;	needed, defined by user input	
+  	; Store sign of floating point
+  	ANDS r2, r0, #0x8000000
+	ITT EQ
+	MOVEQ r2, #ASCII_MINUS
+  	STRBEQ r2, [r5]
+
+	; Obtain integer portion of fp number
+	VMOV s0, r0
+	VCVTR.U32.F32 s1, s0
+
+	; Remove integer portion to only handle
+	; 	the fractional portion
+	VSUB s0, s0, s1
 
 
+	; Load how many decimal places the
+	;	user expects to see
+	LDR r2, #ptr_to_exponent
+	LDRB r3, [r2]
+	MUL r3, r3, #0x00A
+
+	; Multiply fraction by specified
+	;	powers of 10 to obtain integer 
+	;	representation (+ round down)
+	VMOV s2, r3
+	VMUL s0, s0, s3
+	VCVTR.U32.F32 s0, s0
+
+	; CHECKPOINT:
+	;	r0 = fp to convert
+	;	r1 = address of fp string
+	;	s0 = fractional portion
+	;	s1 = integer portion
+	VPUSH {s0}
+
+	LDR r0, ptr_to_temp_int_string
+	VMOV r1, s1
+	BL int2string
+
+	VPOP {s0}
+	LDR r0, ptr_to_temp_frac_string
+	VMOV r1, s0
+	BL int2string
+
+	; Combine strings into full representation
+	MOV r0, r5
+	LDRB r2, [r0]
+	CMP r2, #ASCII_MINUS
+	ADDEQ #0x001
+	
+	LDR r1, ptr_to_temp_int_string
+	BL append_string
+
+	MOV r1, #ASCII_POINT
+	LDRB r1, [r0], #0x001
+	LDR r1, ptr_to_temp_frac_string
+	BL append_string
 
 	; r0 = address of fp string
+	MOV r0, r5
+	POP {r4-r5, pc}
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END FLOAT2STRING <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START APPEND STRING >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
+append_string:
+	PUSH {lr}
+	; r0 = address* of string to append to
+	; r1 = base address of string to append
+	;
+	;	* Appending will start AT this address,
+	;	  i.e., will overwrite the value at r0
+append_loop:
+	LDRB r2, [r0]
+	LDRB r3, [r1], #0x001
+
+	; If the appendee is at its end,
+	;	stop from overwriting external data
+	CMP r2, #NULL
+	BEQ end_append
+
+	; If the appender is at its end,
+	;	stop from reading external data
+	CMP r3, #NULL
+	BEQ end_append
+
+	; Store character and inc.
+	STRB r3, [r0], #0x001
+
+	B append_loop
+
+end_append:
+	; r0 will return as the address
+	;	of the next character
 	POP {pc}
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END APPEND STRING <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
+
 
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART0 HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
@@ -393,36 +391,6 @@ UART0_Handler:
 	ORR r1, r1, #RXIC
 	STR r1, [r0, #UARTICR]
 
-	LDR r1, [r0, #UARTDR]		; Load data from UART reg. to see what key was pressed
-
-
-check_if_start:
-	CMP r1, #START_KEY
-	BNE check_if_exit
-
-	LDR r0, ptr_to_status
-	LDRB r1, [r0]
-	CMP r1, #STATUS_ACTIVE
-	ITE EQ
-	BEQ uart_handled
-	MOVNE r1, #STATUS_ACTIVE
-
-	STRB r1, [r0]
-	B uart_handled
-
-check_if_exit:
-	CMP r1, #EXIT_KEY
-	BNE uart_handled
-
-	LDR r0, ptr_to_status
-	LDRB r1, [r0]
-	CMP r1, #STATUS_ACTIVE
-	ITE NE
-	BNE uart_handled
-	MOVEQ r1, #STATUS_EXIT
-
-	STRB r1, [r0]
-	B uart_handled
 
 uart_handled:
 	POP {lr}

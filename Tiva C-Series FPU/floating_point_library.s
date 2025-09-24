@@ -12,16 +12,10 @@
 	.global int2string
 	.global float2string
 	.global string2float
-	.global bit2string
-	.global string2bit
+	.global append_string
 	.global division
 	.global multiplication
 	.global newline
-
-	.global simple_add_ascii
-	.global single_precision_add_ascii
-	.global single_precision_mul_ascii
-
 
 ; General Purpose Timers
 GPTMCFG:          .equ 0x000	; GPTM Configuration
@@ -490,12 +484,14 @@ done:
 
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END STRING2INT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
+
+
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START DIVISION >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 division:
         PUSH {r4-r12,lr}	; Save registers to stack
 
         CMP r1, #0x0        ; Divide-by-zero?
-        BEQ div_end         ; If divisor = 0, don't divide
+        BEQ div_end         ; If divisor = 0, dont divide
         MOV r4, #0xF        ; Init counter (r4) to 15
         MOV r5, #0x0        ; Init quotient (r5) to 0
         LSL r1, r1, #0xF    ; Logical left shift divisor (r1) 15 places
@@ -583,115 +579,7 @@ newline:
 
 
 
-; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START BIT2STRING >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
-bit2string:
-	PUSH {lr}
 
-	; r0 contains the word to convert
-	; r1 contains the address of the string
-
-	; Setup to loop through all 32 bits
-	MOV r2, #0x80000000
-bit_loop:
-	MOV r4, #ASCII_ZERO
-	ANDS r3, r0, r2
-	BEQ load_ascii
-
-	MOV r4, #ASCII_ONE
-
-load_ascii:
-	STRB r4, [r1], #0x001
-	LSRS r2, r2, #0x001
-	BEQ bit_end
-	B bit_loop
-
-bit_end:
-
-	POP {pc}
-
-
-; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END BIT2STRING <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
-
-
-simple_add_ascii:
-  	PUSH {lr}
-
-  	; r0 = first ascii value
-  	; r1 = second ascii value
-  	; r2 = carry-in value
-  	ADD r0, r0, r1
-  	SUB r0, r0, #ASCII_ZERO
-
-  	CMP r0, #ASCII_NINE
-  	ITTE GT
-  	SUBGT r0, r0, #0x00A
-  	MOVGT r1, #ASCII_ONE
-  	MOVLE r1, #ASCII_ZERO
-
-  	ADD r0, r0, r2
-  	SUB r0, r0, #ASCII_ZERO
-  	CMP r0, #ASCII_NINE
-  	ITT GT
-  	SUBGT r0, r0, #0x00A
-  	MOVGT r1, #ASCII_ONE
-
-  	; Returns sum and carry-out, if applicable
-  	POP {pc}
-
-
-single_precision_add_ascii:
-  	PUSH {r4-r5, lr}
-  	; r0 = base address of first string
-  	; r1 = base address of second string
-  	ADD r4, r0, #POW_OFFSET  ; These might need to be sub I forgot
-  	ADD r5, r1, #POW_OFFSET  ; what endianness tiva uses
-
-  	MOV r2, #ASCII_ZERO      ; First carry-in value should be zero
-
-  	; Load least significant byte of each string
-  	;  until the decimal point is reached
-sp_add_ascii_loop:
-	LDRB r0, [r4]
-  	CMP r0, #ASCII_POINT
-  	BEQ sp_add_ascii_end
-
-  	LDRB r1, [r5], #-0x001
-
-  	; Add and store sum / carry-out value
-  	BL simple_add_ascii
-
-  	MOV r2, r1
-  	STRB r0, [r4], #-0x001
-
-  	B sp_add_ascii_loop
-
-sp_add_ascii_end:
-  	POP {r4-r5, pc}
-
-
-
-
-single_precision_mul_ascii:
-  	PUSH {r4-r6, lr}
-  	; r0 = base address of string to store result
-  	; r1 = base address of string to multiply
-  	; r2 = multiplier
-  	MOV r4, r0
-  	MOV r5, r1
-  	MOV r6, r2
-
-sp_mul_loop:
-  	SUBS r6, r6, #0x001
-  	BLT sp_mul_end
-
-  	MOV r0, r4
-  	MOV r1, r5
-  	BL single_precision_add_ascii
-
-  	B sp_mul_loop
-
-sp_mul_end:
-  	POP {r4-r6, pc}
 
 
 	.end
