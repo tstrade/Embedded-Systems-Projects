@@ -85,13 +85,24 @@ FPCCR:			  .equ 0xF34	; Floating-Point Context Control
 FPCAR:			  .equ 0xF38	; Floating-Point Context Address
 FPDSCR:			  .equ 0xF3C	; Floating-Point Default Status Control
 
-; ASCII Values
-ASCII_POINT:       .equ 0x02E
-ASCII_ZERO:        .equ 0x030
-ASCII_ONE:         .equ 0x031
-ASCII_NINE:        .equ 0x039
-POW_OFFSET:        .equ 0x018 ; Number of bytes to last possible digit in string
+EXPO_SP_MASK:      .equ 0x0FF ; 8-bit mask
+SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
+EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
+EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
 
+ASCII_TIMES:	   .equ 0x02A
+ASCII_PLUS:		   .equ 0x02B
+ASCII_POINT:       .equ 0x02E
+ASCII_MINUS:	   .equ 0x02D
+ASCII_DIVIDE:	   .equ 0x02F
+ASCII_ZERO:        .equ 0x030
+ASCII_NINE:        .equ 0x039
+
+; Extended ASCII might not be supported by PuTTy
+ASCII_SQRT:		   .equ 0x0FB
+
+
+NULL:			   .equ 0x000
 
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART INTERRUPT INIT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
@@ -576,6 +587,7 @@ newline:
 	POP {r4-r12,lr}
 	MOV pc,lr
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END MULTIPLICATION <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
+
 
 
 
