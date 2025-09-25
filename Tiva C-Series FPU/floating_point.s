@@ -5,7 +5,16 @@ temp_frac_string:	.string "000000000000000000", 0
 temp_fp_string:		.string "000000000000000000000000000000000000", 0
 
 sign:      		.byte 0x00
-exponent:  		.byte 0x00
+exponent:  		.byte 0x03
+
+; 0 = Waiting to Begin
+; 1 = 1st Operand
+; 2 = Operation
+; 3 = 2nd Operand (if applicable)
+; 4 = Ready to Calculate
+; 5 = Exit
+
+calc_state:		.byte 0x00
 
 	.text
 	.global fpu_init
@@ -32,8 +41,11 @@ exponent:  		.byte 0x00
 ptr_to_temp_int_string:		.word temp_int_string
 ptr_to_temp_frac_string:	.word temp_frac_string
 ptr_to_temp_fp_string:		.word temp_fp_string
+
 ptr_to_sign:       			.word sign
 ptr_to_exponent:   			.word exponent
+ptr_to_calc_state:			.word calc_state
+
 
 ; GENERAL KEYPAD LAYOUT
 ;
@@ -147,6 +159,8 @@ SIGN_SP_SHIFT:     .equ 0x01F ; Shift left 31 bits
 EXPO_SP_SHIFT:     .equ 0x017 ; Shift left 23 bits
 EXPO_SP_BIAS:      .equ 0x074 ; Bias = 127
 
+ASCII_ESC:		   .equ 0x01B
+ASCII_SPACE:	   .equ 0x020
 ASCII_TIMES:	   .equ 0x02A
 ASCII_PLUS:		   .equ 0x02B
 ASCII_POINT:       .equ 0x02E
@@ -154,12 +168,19 @@ ASCII_MINUS:	   .equ 0x02D
 ASCII_DIVIDE:	   .equ 0x02F
 ASCII_ZERO:        .equ 0x030
 ASCII_NINE:        .equ 0x039
-
-; Extended ASCII might not be supported by PuTTy
-ASCII_SQRT:		   .equ 0x0FB
-
+ASCII_EQUAL:	   .equ 0x03D
+ASCII_SQUARE:	   .equ 0x05E
+ASCII_SQRT:		   .equ 0x072
+ASCII_YES:		   .equ 0x079
 
 NULL:			   .equ 0x000
+
+STATE_WAIT:		   .equ 0x000
+STATE_FIRSTOP:	   .equ 0x001
+STATE_OPERATION:   .equ 0x002
+STATE_SECONDOP:	   .equ 0x003
+STATE_READY:	   .equ 0x004
+STATE_EXIT:		   .equ 0x005
 
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START FPU INIT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
@@ -180,6 +201,11 @@ fpu_init:
   ;  "Instruction Synchronization Barrier"
   ISB
 
+  ; Set to round to nearest
+  LDR r1, [r0, #FPDSCR]
+  BIC r1, r1, #0x00C00000
+  STR r1, [r0, #FPDSCR]
+
   POP {pc}
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END FPU INIT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
@@ -194,26 +220,8 @@ fpu_project:
 	MOV r0, #0x00C
 	BL output_character
 
-	; 7.2
-	MOV r0, #0x6666
-	MOVT r0, #0x40E6
-
-	; 14.86
-	MOV r1, #0xC28F
-	MOVT r1, #0x416D
-
-	; Transfers single-precision registers to and from ARM core register
-	VMOV s0, r0
-	VMOV s1, r1
-
-	; Floating-point Add
-	VADD.F32 s2, s0, s1
-
-	VMOV r0, s2
-	BL float2string
-
-	LDR r0, ptr_to_frac_string
-	BL output_string
+	nop
+	nop
 
 
 
@@ -222,17 +230,115 @@ fpu_project:
 
 
 
+
+
+
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART0 HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
+UART0_Handler:
+	PUSH {lr}
+
+	MOV r0, #0xC000
+	MOVT r0, #0x4000
+
+	LDR r1, [r0, #UARTICR]
+	ORR r1, r1, #RXIC
+	STR r1, [r0, #UARTICR]
+
+	LDR r1, [r0, #UARTDR]
+
+	LDR r2, ptr_to_calc_state
+	LDRB r3, [r2]
+
+	; Ignore input if user elected to exit completely
+	CMP r3, #STATE_EXIT
+	BEQ uart_handled
+
+	; User can exit anytime by pressing escape
+	CMP r1, #ASCII_ESC
+	ITT EQ
+	MOVEQ r3, #STATE_EXIT
+	STRBEQ r3, [r2]
+	BEQ uart_handled
+
+	; If user has not started yet, check if 'y'es
+check_wait:
+	CMP r3, #STATE_WAIT
+	BNE check_firstop
+
+	; 	Ignore if user presses anything except for 'y'es
+	CMP r1, #ASCII_YES
+	BNE uart_handled
+
+	MOV r3, #STATE_FIRSTOP
+	STRB r3, [r2]
+	BL newline
+	B uart_handled
+
+; If inputting either fp operand, will
+;	need to use a buffer to store value
+;	then convert, calculate, convert, output
+check_space:
+	CMP r1, #ASCII_SPACE
+	ADD r3, r3, #0x001
+	CMP r3, #STATE_EXIT
+	IT EQ
+	MOVEQ r3, #STATE_FIRSTOP
+
+check_firstop:
+	CMP r3, #STATE_FIRSTOP
+	BNE check_operation
+
+
+
+check_operation:
+	CMP r3, #STATE_OPERATION
+	BNE check_secondop
+
+check_secondop:
+	CMP r3, #STATE_SECONDOP
+	BNE check_ready
+
+check_ready:
+	CMP r3, #STATE_READY
+	BNE uart_handled
+
+
+
+
+	; Operation entry
+	;
+	;	+
+	;
+	;	-
+	;
+	;	x
+	;
+	;   /
+	;
+	;	^ (square)
+	;
+	;   r (square root)
+	;
+	;	=
+
+uart_handled:
+	POP {lr}
+	BX lr
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END UART0 HANDLER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
+
+
+
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START STRING2FLOAT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 string2float:
-	PUSH {r4, lr}
+	PUSH {r4-r5, lr}
 
 	; r0 = address of fp string
 
 	; Once the radix point is found, we will
-	; 	insert a null byte to split the 
+	; 	insert a null byte to split the
 	;	integer part from the fractional part
-	MOV r4, r0 
-	MOV r2, #0x000
+	MOV r4, r0
+	MOV r2, #NULL
 
 find_radix:
 	LDRB r1, [r4], #0x001
@@ -243,37 +349,42 @@ find_radix:
 
 
 	; Obtain the integer part of the fp string
+	;	(w/ rounding to 0)
 	BL string2int
 	VMOV s0, r0
-	VPUSH.F32 {s0}
+	VCVT.F32.S32 s0, s0
+	VPUSH {s0}
 
 	; Obtain the fractional part of the fp string
+	;	(w/ rounding to nearest)
 	MOV r0, r4
 	BL string2int
 	VMOV s1, r0
+	VCVT.F32.S32 s1, s1
 
+	VMOV.F32 s2, #10.0
 	; Find how many fractional places are used
 find_frac_size:
 	LDRB r0, [r4], #0x001
-	CMP r0, #0x000
-	ITTE NE
-	VDIVNE s1, s1, #0x00A.
+	CMP r0, #NULL
+	ITT NE
+	VDIVNE.F32 s1, s1, s2
 	BNE find_frac_size
-	
-	VPOP.F32 {s0}
-	VADD s0, s0, s1
+
+	VPOP {s0}
+	VADD.F32 s0, s0, s1
 	VMOV r0, s0
 
 	; r0 = fp value
 
-	POP {r4, pc}
+	POP {r4-r5, pc}
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END STRING2FLOAT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START FLOAT2STRING >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
 float2string:
-	PUSH {r4-r5, lr}
+	PUSH {r4-r6, lr}
 
 	; r0 = fp to convert
 	; r1 = address of fp string
@@ -282,45 +393,49 @@ float2string:
 
   	; Store sign of floating point
   	ANDS r2, r0, #0x8000000
-	ITT EQ
-	MOVEQ r2, #ASCII_MINUS
-  	STRBEQ r2, [r5]
+	ITT NE
+	MOVNE r2, #ASCII_MINUS
+  	STRBNE r2, [r5]
 
 	; Obtain integer portion of fp number
 	VMOV s0, r0
-	VCVTR.U32.F32 s1, s0
+	VCVT.S32.F32 s1, s0
+	VCVT.F32.S32 s1, s1
 
 	; Remove integer portion to only handle
 	; 	the fractional portion
-	VSUB s0, s0, s1
+	VSUB.F32 s0, s0, s1
 
 
 	; Load how many decimal places the
 	;	user expects to see
-	LDR r2, #ptr_to_exponent
+	LDR r2, ptr_to_exponent
 	LDRB r3, [r2]
-	MUL r3, r3, #0x00A
+	VMOV.F32 s3, #10.
 
 	; Multiply fraction by specified
-	;	powers of 10 to obtain integer 
+	;	powers of 10 to obtain integer
 	;	representation (+ round down)
-	VMOV s2, r3
-	VMUL s0, s0, s3
-	VCVTR.U32.F32 s0, s0
+fp_pow_loop:
+	VMUL.F32 s0, s0, s3
+	SUBS r3, r3, #0x001
+	BGT fp_pow_loop
 
 	; CHECKPOINT:
 	;	r0 = fp to convert
 	;	r1 = address of fp string
 	;	s0 = fractional portion
 	;	s1 = integer portion
-	VPUSH {s0}
+	;VPUSH {s0}
 
 	LDR r0, ptr_to_temp_int_string
+	VCVT.S32.F32 s1, s1
 	VMOV r1, s1
 	BL int2string
 
-	VPOP {s0}
+	;VPOP {s0}
 	LDR r0, ptr_to_temp_frac_string
+	VCVT.S32.F32 s0, s0
 	VMOV r1, s0
 	BL int2string
 
@@ -328,8 +443,9 @@ float2string:
 	MOV r0, r5
 	LDRB r2, [r0]
 	CMP r2, #ASCII_MINUS
-	ADDEQ #0x001
-	
+	IT EQ
+	ADDEQ r0, #0x001
+
 	LDR r1, ptr_to_temp_int_string
 	BL append_string
 
@@ -340,7 +456,7 @@ float2string:
 
 	; r0 = address of fp string
 	MOV r0, r5
-	POP {r4-r5, pc}
+	POP {r4-r6, pc}
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END FLOAT2STRING <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
@@ -378,24 +494,6 @@ end_append:
 	POP {pc}
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END APPEND STRING <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
-
-
-; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART0 HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
-UART0_Handler:
-	PUSH {lr}
-
-	MOV r0, #0xC000
-	MOVT r0, #0x4000
-
-	LDR r1, [r0, #UARTICR]
-	ORR r1, r1, #RXIC
-	STR r1, [r0, #UARTICR]
-
-
-uart_handled:
-	POP {lr}
-	BX lr
-; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END UART0 HANDLER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
 
