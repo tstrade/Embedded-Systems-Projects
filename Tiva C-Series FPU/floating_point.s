@@ -260,14 +260,18 @@ fpu_project:
 
 	LDR r0, ptr_to_start_prompt
 	BL output_string
-
-	;BL uart_interrupt_init
-
+	
+	; Wait for user to press 'y' to start
+	;	using the calculator
+	;
 fpu_start_loop:
 	BL read_character
 	CMP r0, #ASCII_YES
 	BNE fpu_start_loop
 
+	; Prompt the user to enter the first operand
+	;	and store into a buffer
+	;
 fpu_first_operand:
 	LDR r0, ptr_to_firstop_prompt
 	BL output_string
@@ -275,6 +279,10 @@ fpu_first_operand:
 	BL read_string
 
 
+	; Prompt user for the operation wanted and either:
+	;	Square / Square Root: continue with asking for 2nd operand
+	;	+, -, x, /: prompt user for 2nd operand and store to buffer
+	;
 fpu_operation:
 	LDR r0, ptr_to_operation_prompt
 	BL output_string
@@ -294,6 +302,7 @@ fpu_check_sqrt:
 	BNE fpu_double_op
 	B fpu_display_result
 
+	; Pointless I think
 fpu_double_op:
 	CMP r0, #ASCII_PLUS
 	BEQ fpu_second_operand
@@ -311,6 +320,11 @@ fpu_second_operand:
 	LDR r0, ptr_to_secondop_buffer
 	BL read_string
 
+	; Get number of decimal places the
+	;	user wants the result to contain
+	;	and use this as the exponent
+	;	when mult/div by 10^{# of decimal places}
+	;
 fpu_display_result:
 	LDR r0, ptr_to_decplace_prompt
 	BL output_string
@@ -323,6 +337,7 @@ fpu_display_result:
 	LDR r1, ptr_to_exponent
 	STRB r0, [r1]
 
+	; Perform operation and display
 	BL handle_fp_operation
 
 	BL newline
@@ -331,6 +346,8 @@ fpu_display_result:
 	LDR r0, ptr_to_continue_prompt
 	BL output_string
 
+	; Prompt user to either press 'y' to continue
+	;	or 'n' to exit
 fpu_continue_loop:
 	BL read_character
 	CMP r0, #ASCII_YES
@@ -349,11 +366,18 @@ fpu_continue_loop:
 handle_fp_operation:
 	PUSH {r4-r6,lr}
 
+	; Pull string of 1st operand from 
+	;	buffer and convert to FP value
+	;
 	LDR r0, ptr_to_firstop_buffer
 	BL string2float
 
 	VMOV s0, r0
 
+	; If the operation is either square or
+	;	square root, perform now and continue
+	;	on to display the result
+	;
 	LDR r4, ptr_to_operation_buffer
 	LDRB r5, [r4]
 	CMP r5, #ASCII_SQUARE
@@ -366,12 +390,17 @@ handle_fp_operation:
 	VSQRTEQ.F32 s0, s0
 	BEQ display_fp_result
 
+	; If a second operand is needed, pull the
+	;	string from the buffer and convert to
+	;	FP value
+	;
 	LDR r0, ptr_to_secondop_buffer
 	VPUSH {s0}
 	BL string2float
 	VPOP {s0}
 	VMOV s1, r0
 
+	; Perform specified operation
 	CMP r5, #ASCII_PLUS
 	ITT EQ
 	VADDEQ.F32 s0, s0, s1
@@ -393,6 +422,9 @@ handle_fp_operation:
 	BEQ display_fp_result
 
 
+	; Check that the result didn't result in
+	;	 underflow, overflow, or div-by-zero
+	;
 display_fp_result:
 	; check for inf / NaN
 	MOV r5, #0xE000E000
@@ -421,6 +453,9 @@ display_fp_result:
 	LDR r0, ptr_to_result_prompt
 	BL output_string
 
+	; Convert the result into a string
+	;	and display to the user
+	;
 	VMOV r0, s0
 	LDR r1, ptr_to_result_buffer
 	BL float2string
@@ -454,14 +489,14 @@ find_radix:
 
 
 	; Obtain the integer part of the fp string
-	;	(w/ rounding to 0)
+	;	
 	BL string2int
 	VMOV s0, r0
 	VCVT.F32.S32 s0, s0
 	VPUSH {s0}
 
 	; Obtain the fractional part of the fp string
-	;	(w/ rounding to nearest)
+	;
 	MOV r0, r4
 	BL string2int
 	VMOV s1, r0
