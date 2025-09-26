@@ -1,7 +1,8 @@
 	.data
 
 start_prompt:		.string 0xC, 0xD, 0xA, 0x9, 0x9, 0x9, ">>>> FLOATING POINT CALCULATOR <<<<"
-					.string 0xD, 0xA, "Supports ADD (+), SUBTRACT (-), MULTIPLY (x), DIVIDE (/), SQUARE (^), AND SQUARE ROOT (r)", 0xD, 0xA, 0
+					.string 0xD, 0xA, "Supports ADD (+), SUBTRACT (-), MULTIPLY (x), DIVIDE (/), SQUARE (^), AND SQUARE ROOT (r)", 0xD, 0xA
+					.string 0xD, 0xA, 0x9, 0x9, 0x9, "Press 'y' to start the calculator", 0xD, 0xA, 0
 
 firstop_prompt:		.string 0xD, 0xA, 0x9, "Enter first operand:", 0xD, 0xA, 0x9, 0x9, 0
 firstop_buffer:		.string "000000000000000000", 0
@@ -13,9 +14,13 @@ secondop_prompt:	.string 0xD, 0xA, 0x9, "Enter second operand:", 0xD, 0xA, 0x9, 
 secondop_buffer:	.string "000000000000000000", 0
 
 decplace_prompt:	.string 0xD, 0xA, 0x9, "Enter the number of decimal points (1 to 9) desired in the result:", 0xD, 0xA, 0x9, 0x9, 0
+decplace_buffer:	.string "00", 0
 
 result_prompt:		.string 0xD, 0xA, 0x9, "= ", 0
 result_buffer:		.string "000000000000000000", 0
+
+continue_prompt:	.string 0xD, 0xA, 0x9, "Press 'y' to continue or 'n' to exit", 0
+continue_buffer:	.string "0", 0
 
 goodbye:			.string 0xC, 0xD, 0xA, 0x9, "Goodbye!", 0
 
@@ -71,8 +76,11 @@ ptr_to_operation_buffer:	.word operation_buffer
 ptr_to_secondop_prompt:		.word secondop_prompt
 ptr_to_secondop_buffer:		.word secondop_buffer
 ptr_to_decplace_prompt:		.word decplace_prompt
+ptr_to_decplace_buffer:		.word decplace_buffer
 ptr_to_result_prompt:		.word result_prompt
 ptr_to_result_buffer:		.word result_buffer
+ptr_to_continue_prompt:		.word continue_prompt
+ptr_to_continue_buffer:		.word continue_buffer
 ptr_to_goodbye:				.word goodbye
 
 ptr_to_temp_int_string:		.word temp_int_string
@@ -204,18 +212,13 @@ ASCII_ZERO:        .equ 0x030
 ASCII_NINE:        .equ 0x039
 ASCII_EQUAL:	   .equ 0x03D
 ASCII_SQUARE:	   .equ 0x05E
+ASCII_NO:		   .equ 0x06E
 ASCII_SQRT:		   .equ 0x072
 ASCII_TIMES:	   .equ 0x078
 ASCII_YES:		   .equ 0x079
 
-NULL:			   .equ 0x000
 
-STATE_WAIT:		   .equ 0x000
-STATE_FIRSTOP:	   .equ 0x001
-STATE_OPERATION:   .equ 0x002
-STATE_SECONDOP:	   .equ 0x003
-STATE_READY:	   .equ 0x004
-STATE_EXIT:		   .equ 0x005
+NULL:			   .equ 0x000
 
 
 ; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START FPU INIT >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
@@ -252,16 +255,88 @@ fpu_project:
 
 	BL uart_init
 
+	MOV r0, #0x00C
+	BL output_character
+
 	LDR r0, ptr_to_start_prompt
 	BL output_string
 
-	BL uart_interrupt_init
+	;BL uart_interrupt_init
 
-fpu_loop:
-	LDR r0, ptr_to_calc_state
+fpu_start_loop:
+	BL read_character
+	CMP r0, #ASCII_YES
+	BNE fpu_start_loop
+
+fpu_first_operand:
+	LDR r0, ptr_to_firstop_prompt
+	BL output_string
+	LDR r0, ptr_to_firstop_buffer
+	BL read_string
+
+
+fpu_operation:
+	LDR r0, ptr_to_operation_prompt
+	BL output_string
+	LDR r0, ptr_to_operation_buffer
+	BL read_string
+
+	LDR r0, ptr_to_operation_buffer
 	LDRB r0, [r0]
-	CMP r0, #STATE_EXIT
-	BNE fpu_loop
+
+fpu_check_square:
+	CMP r0, #ASCII_SQUARE
+	BNE fpu_check_sqrt
+	B fpu_display_result
+
+fpu_check_sqrt:
+	CMP r0, #ASCII_SQRT
+	BNE fpu_double_op
+	B fpu_display_result
+
+fpu_double_op:
+	CMP r0, #ASCII_PLUS
+	BEQ fpu_second_operand
+	CMP r0, #ASCII_MINUS
+	BEQ fpu_second_operand
+	CMP r0, #ASCII_TIMES
+	BEQ fpu_second_operand
+	CMP r0, #ASCII_DIVIDE
+	BEQ fpu_second_operand
+
+
+fpu_second_operand:
+	LDR r0, ptr_to_secondop_prompt
+	BL output_string
+	LDR r0, ptr_to_secondop_buffer
+	BL read_string
+
+fpu_display_result:
+	LDR r0, ptr_to_decplace_prompt
+	BL output_string
+	LDR r0, ptr_to_decplace_buffer
+	BL read_string
+
+	LDR r0, ptr_to_decplace_buffer
+	BL string2int
+
+	LDR r1, ptr_to_exponent
+	STRB r0, [r1]
+
+	BL handle_fp_operation
+
+	BL newline
+	BL newline
+
+	LDR r0, ptr_to_continue_prompt
+	BL output_string
+
+fpu_continue_loop:
+	BL read_character
+	CMP r0, #ASCII_YES
+	BEQ fpu_first_operand
+	CMP r0, #ASCII_NO
+	BNE fpu_continue_loop
 
 	LDR r0, ptr_to_goodbye
 	BL output_string
@@ -271,196 +346,6 @@ fpu_loop:
 
 
 
-
-
-
-; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START UART0 HANDLER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
-UART0_Handler:
-	PUSH {r4-r6, lr}
-
-	MOV r0, #0xC000
-	MOVT r0, #0x4000
-
-	LDR r1, [r0, #UARTICR]
-	ORR r1, r1, #RXIC
-	STR r1, [r0, #UARTICR]
-
-	LDR r4, [r0, #UARTDR]
-
-	LDR r2, ptr_to_calc_state
-	LDRB r3, [r2]
-
-	; Ignore input if user elected to exit completely
-	CMP r3, #STATE_EXIT
-	BEQ uart_handled
-
-	; User can exit anytime by pressing escape
-	CMP r4, #ASCII_ESC
-	ITT EQ
-	MOVEQ r3, #STATE_EXIT
-	STRBEQ r3, [r2]
-	BEQ uart_handled
-
-	; If user has not started yet, check if 'y'es
-check_wait:
-	CMP r3, #STATE_WAIT
-	BNE check_firstop
-
-	; 	Ignore if user presses anything except for 'y'es
-	CMP r4, #ASCII_YES
-	BNE uart_handled
-
-	MOV r3, #STATE_FIRSTOP
-	STRB r3, [r2]
-
-	LDR r0, ptr_to_firstop_prompt
-	BL output_string
-	B uart_handled
-
-
-check_firstop:
-	CMP r3, #STATE_FIRSTOP
-	BNE check_operation
-
-	MOV r0, r4
-	BL output_character
-	; Fill buffer
-	LDR r0, ptr_to_firstop_offset
-	LDRB r1, [r0]
-
-	MOV r5, r4
-	; If enter, replace with NULL byte
-	CMP r4, #ASCII_ENTER
-	ITTE EQ
-	MOVEQ r5, #NULL
-	MOVEQ r1, #NULL
-	ADDNE r1, r1, #0x001
-
-	STRB r1, [r0]
-
-	LDR r0, ptr_to_firstop_buffer
-	ADD r0, r0, r1
-	STRB r5, [r0]
-
-	; If enter, change state
-	CMP r4, #ASCII_ENTER
-	BNE uart_handled
-
-	MOV r3, #STATE_OPERATION
-	STRB r3, [r2]
-
-	LDR r0, ptr_to_operation_prompt
-	BL output_string
-	B uart_handled
-
-check_operation:
-	CMP r3, #STATE_OPERATION
-	BNE check_secondop
-
-	MOV r5, #STATE_SECONDOP
-
-	CMP r4, #ASCII_PLUS
-	BEQ valid_operation
-
-	CMP r4, #ASCII_MINUS
-	BEQ valid_operation
-
-	CMP r4, #ASCII_TIMES
-	BEQ valid_operation
-
-	CMP r4, #ASCII_DIVIDE
-	BEQ valid_operation
-
-	CMP r4, #ASCII_SQUARE
-	ITT EQ
-	MOVEQ r5, #STATE_READY
-	BEQ valid_operation
-
-	CMP r4, #ASCII_SQRT
-	ITT EQ
-	MOVEQ r5, #STATE_READY
-	BEQ valid_operation
-
-invalid_operation:
-	B uart_handled
-
-valid_operation:
-	LDR r0, ptr_to_operation_buffer
-	STRB r4, [r0]
-	MOV r0, r4
-	BL output_character
-
-	LDR r0, ptr_to_calc_state
-	STRB r5, [r0]
-
-	CMP r5, #STATE_SECONDOP
-	ITE EQ
-	LDREQ r0, ptr_to_secondop_prompt
-	LDRNE r0, ptr_to_decplace_prompt
-
-	BL output_string
-	B uart_handled
-
-check_secondop:
-	CMP r3, #STATE_SECONDOP
-	BNE check_ready
-
-	MOV r0, r4
-	BL output_character
-	; Fill buffer
-	LDR r0, ptr_to_secondop_offset
-	LDRB r1, [r0]
-
-	MOV r5, r4
-	; If enter, replace with NULL byte
-	CMP r4, #ASCII_ENTER
-	ITTE EQ
-	MOVEQ r5, #NULL
-	MOVEQ r1, #NULL
-	ADDNE r1, r1, #0x001
-
-	STRB r1, [r0]
-
-	LDR r0, ptr_to_secondop_buffer
-	ADD r0, r0, r1
-	STRB r5, [r0]
-
-	; If enter, change state
-	CMP r4, #ASCII_ENTER
-	BNE uart_handled
-
-	MOV r3, #STATE_READY
-	STRB r3, [r2]
-
-	LDR r0, ptr_to_decplace_prompt
-	BL output_string
-	B uart_handled
-
-check_ready:
-	CMP r3, #STATE_READY
-	BNE uart_handled
-
-	CMP r4, #ASCII_ZERO
-	BLE uart_handled
-
-	CMP r4, #ASCII_NINE
-	BGT uart_handled
-
-	MOV r0, r4
-	BL output_character
-
-	SUB r4, r4, #ASCII_ZERO
-	LDR r0, ptr_to_exponent
-	STRB r4, [r0]
-
-	BL handle_fp_operation
-
-
-uart_handled:
-	POP {r4-r6, lr}
-	BX lr
-; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END UART0 HANDLER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
-
 handle_fp_operation:
 	PUSH {r4-r6,lr}
 
@@ -468,7 +353,6 @@ handle_fp_operation:
 	BL string2float
 
 	VMOV s0, r0
-	VCVT.F32.S32 s0, s0
 
 	LDR r4, ptr_to_operation_buffer
 	LDRB r5, [r4]
@@ -483,7 +367,9 @@ handle_fp_operation:
 	BEQ display_fp_result
 
 	LDR r0, ptr_to_secondop_buffer
+	VPUSH {s0}
 	BL string2float
+	VPOP {s0}
 	VMOV s1, r0
 
 	CMP r5, #ASCII_PLUS
@@ -501,7 +387,7 @@ handle_fp_operation:
 	VMULEQ.F32 s0, s0, s1
 	BEQ display_fp_result
 
-	CMP r6, #ASCII_DIVIDE
+	CMP r5, #ASCII_DIVIDE
 	ITT EQ
 	VDIVEQ.F32 s0, s0, s1
 	BEQ display_fp_result
@@ -554,6 +440,11 @@ string2float:
 	MOV r4, r0
 	MOV r2, #NULL
 
+	LDRB r1, [r4]
+	CMP r1, #ASCII_MINUS
+	IT EQ
+	MOVEQ r5, #0x80000000
+
 find_radix:
 	LDRB r1, [r4], #0x001
 	CMP r1, #ASCII_POINT
@@ -589,6 +480,8 @@ find_frac_size:
 	VADD.F32 s0, s0, s1
 	VMOV r0, s0
 
+	ORR r0, r0, r5
+
 	; r0 = fp value
 
 	POP {r4-r5, pc}
@@ -621,7 +514,6 @@ float2string:
 	; 	the fractional portion
 	VSUB.F32 s0, s0, s1
 
-
 	; Load how many decimal places the
 	;	user expects to see
 	LDR r2, ptr_to_exponent
@@ -634,7 +526,7 @@ float2string:
 fp_pow_loop:
 	VMUL.F32 s0, s0, s3
 	SUBS r3, r3, #0x001
-	BGT fp_pow_loop
+	BGE fp_pow_loop
 
 	; CHECKPOINT:
 	;	r0 = fp to convert
@@ -666,7 +558,11 @@ fp_pow_loop:
 
 	MOV r1, #ASCII_POINT
 	STRB r1, [r0], #0x001
+	LDR r2, ptr_to_exponent
+	LDRB r2, [r2]
 	LDR r1, ptr_to_temp_frac_string
+	MOV r3, #NULL
+	STRB r3, [r1, r2]
 	BL append_string
 
 	; r0 = address of fp string
@@ -696,6 +592,8 @@ append_loop:
 	; If the appender is at its end,
 	;	stop from reading external data
 	CMP r3, #NULL
+	ITT EQ
+	STRB r3, [r0]
 	BEQ end_append
 
 	; Store character and inc.
