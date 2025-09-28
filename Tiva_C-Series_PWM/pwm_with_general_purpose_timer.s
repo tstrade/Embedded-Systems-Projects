@@ -1,6 +1,12 @@
 	.data
 
-start_prompt:	.string "RGB LED", 0
+start_prompt:	.string 0xC, 0xD, 0xA, 0x9, 0x9, 0x9 
+				.string	">>> \x1b[31mA\x1b[33mD\x1b[32,V"
+				.string "\x1b[36mA\x1b[34mN\x1b[35m\x1b[31mC"
+				.string "\x1b[33mE\x1b[32mD \x1b[36mR\x1b[34mG"
+				.string "\x1b[35mB \x1b[31mL\x1b[33mE\x1b[32mD\x1b[39m <<<"
+				.string 0xD, 0xA, 0x9, 0x9, "When prompted, select a color by entering its hex value "
+				.string "in the form of 0x------", 0xD, 0xA, 0x9, "Press space to begin, and ESC to quit anytime.", 0
 
 rgb_prev_state:		.byte 0x00
 
@@ -18,7 +24,7 @@ reset_rgb:			.word 0x000000
 	.global Advanced_RGB_LED
 	.global illuminate_RGB_LED
 	.global rgb_led_init
-	.global Timer_Handler
+	.global pwm_with_gpt
 
 	.global uart_interrupt_init
 	.global timer_interrupt_init
@@ -104,6 +110,16 @@ RED_LED:		  .equ 0x002	; PF1 (Red) Mask
 BLUE_LED:		  .equ 0x004	; PF2 (Blue) Mask
 GREEN_LED:		  .equ 0x008	; PF3 (Green) Mask
 
+
+; ASCII
+ASCII_ESC:		   .equ 0x01B
+ASCII_SPACE:	   .equ 0x020
+ASCII_ZERO:		   .equ 0x030
+ASCII_NINE:		   .equ 0x039
+ASCII_x:		   .equ 0x078
+
+
+
 rgb_led_init:
 	PUSH {lr}
 	; PF1 = RED
@@ -138,7 +154,19 @@ rgb_led_init:
 	POP {pc}
 
 
+pwm_with_gpt:
+	PUSH {lr}
 
+	BL rgb_led_init
+
+	LDR r0, ptr_to_start_prompt
+	BL output_string
+	
+
+pwm_loop:
+
+
+	POP {pc}
 
 
 
@@ -154,28 +182,6 @@ Blinky:
 Advanced_RGB_LED:
 	PUSH {lr}
 
-	BL rgb_led_init
-
-	LDR r0, ptr_to_rgb_input
-	MOV r1, #0xFF2E
-	MOVT r1, #0x0070
-	STR r1, [r0]
-
-	LDR r0, ptr_to_reset_rgb
-	STR r1, [r0]
-	BL timer_interrupt_init
-
-loop_forever:
-	B loop_forever
-
-
-	POP {pc}
-
-
-
-Timer_Handler:
-	PUSH {lr}
-
 	; Timer 0 base address
 	MOV r0, #0x0000
 	MOVT r0, #0x4003
@@ -186,10 +192,7 @@ Timer_Handler:
 	STR r1, [r0, #GPTMICR]
 
 	; r0 = input to illuminate_RGB_LED
-	; r1 =
 	MOV r0, #NULL
-	MOV r1, #0x0101
-	MOVT r1, #0x0001
 
 	LDR r3, ptr_to_rgb_input
 	LDR r2, [r3]

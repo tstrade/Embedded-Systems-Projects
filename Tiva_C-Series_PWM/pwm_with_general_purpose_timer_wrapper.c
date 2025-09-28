@@ -1,10 +1,10 @@
 extern int Blinky ( void );
-extern int Advanced_RGB_LED ( void );
+extern int pwm_with_gpt ( void );
 
 /**
  * main.c
  */
 int main(void)
 {
-	Advanced_RGB_LED ();
+	pwm_with_gpt ();
 }
