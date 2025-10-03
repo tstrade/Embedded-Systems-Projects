@@ -1,4 +1,3 @@
-extern int Blinky ( void );
 extern int pwm_with_gpt ( void );
 
 /**
