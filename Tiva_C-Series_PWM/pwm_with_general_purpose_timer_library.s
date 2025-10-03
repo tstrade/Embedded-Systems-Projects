@@ -7,6 +7,7 @@
 	.global read_character
 	.global read_string
 	.global output_string
+	.global simple_read_character
 
 	.global string2int
 	.global int2string
@@ -677,6 +678,19 @@ illuminate_RGB_LED:
 
 
 
+; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>> START SIMPLE READ CHARACTER >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ;
+
+simple_read_character:
+    PUSH {r4-r12,lr}                ; Save registers to stack.
+
+	MOV r4, #0xC000		            ;
+	MOVT r4, #0x4000                ; UART0 Base Address
+	LDRB r0, [r4]		            ; Load data (character entered) into r0
+
+	POP {r4-r12, lr}	            ; Restore registers
+    MOV pc, lr 			            ; Return
+
+; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END SIMPLE READ CHARACTER <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< ;
 
 
 
