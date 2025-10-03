@@ -1,12 +1,22 @@
 	.data
 
-start_prompt:	.string 0xC, 0xD, 0xA, 0x9, 0x9, 0x9 
-				.string	">>> \x1b[31mA\x1b[33mD\x1b[32,V"
-				.string "\x1b[36mA\x1b[34mN\x1b[35m\x1b[31mC"
-				.string "\x1b[33mE\x1b[32mD \x1b[36mR\x1b[34mG"
-				.string "\x1b[35mB \x1b[31mL\x1b[33mE\x1b[32mD\x1b[39m <<<"
-				.string 0xD, 0xA, 0x9, 0x9, "When prompted, select a color by entering its hex value "
-				.string "in the form of 0x------", 0xD, 0xA, 0x9, "Press space to begin, and ESC to quit anytime.", 0
+start_prompt:	.string 0xC, 0xD, 0xA, 0x9, 0x9, 0x9
+				.string ">>> ADVANCED RGB LED <<<"
+				.string 0xD, 0xA, 0x9, 0x9
+				.string "When prompted, select a color by entering its hex value "
+				.string "in the form of 0x------"
+				.string 0xD, 0xA, 0x9
+				.string "Press space to continue, and ESC to quit anytime."
+				.string 0xD, 0xA, 0xD, 0xA, 0x9, 0
+
+
+goodbye:		.string 0xD, 0xA, 0xD, 0xA, 0x9, 0x9
+				.string "Goodbye!", 0
+
+input_prompt:	.string 0xD, 0xA, 0x9
+				.string "Input Color Hex Value: ", 0
+
+input_buffer:	.string "0x------", 0
 
 rgb_prev_state:		.byte 0x00
 
@@ -16,11 +26,12 @@ red_duty_cycle: 	.byte 0x00
 blue_duty_cycle:	.byte 0x00
 green_duty_cycle:	.byte 0x00
 
+prog_status:		.byte 0x00
+
 reset_rgb:			.word 0x000000
 
 	.text
 
-	.global Blinky
 	.global Advanced_RGB_LED
 	.global illuminate_RGB_LED
 	.global rgb_led_init
@@ -33,6 +44,7 @@ reset_rgb:			.word 0x000000
 	.global read_character
 	.global read_string
 	.global output_string
+	.global simple_read_character
 
 	.global string2int
 	.global int2string
@@ -41,12 +53,16 @@ reset_rgb:			.word 0x000000
 	.global newline
 
 ptr_to_start_prompt:	.word start_prompt
+ptr_to_goodbye:			.word goodbye
+ptr_to_input_prompt:	.word input_prompt
+ptr_to_input_buffer:	.word input_buffer
 ptr_to_rgb_prev_state:	.word rgb_prev_state
 ptr_to_rgb_input:		.word rgb_input
 ptr_to_red_dc:			.word red_duty_cycle
 ptr_to_blue_dc:			.word blue_duty_cycle
 ptr_to_green_dc:		.word green_duty_cycle
 ptr_to_reset_rgb:		.word reset_rgb
+ptr_to_prog_status:		.word prog_status
 
 
 ; General Purpose Timers
@@ -110,6 +126,10 @@ RED_LED:		  .equ 0x002	; PF1 (Red) Mask
 BLUE_LED:		  .equ 0x004	; PF2 (Blue) Mask
 GREEN_LED:		  .equ 0x008	; PF3 (Green) Mask
 
+WAIT_START:		  .equ 0x000
+WAIT_INPUT:		  .equ 0x001
+USER_EXIT:		  .equ 0x002
+
 
 ; ASCII
 ASCII_ESC:		   .equ 0x01B
@@ -118,6 +138,12 @@ ASCII_ZERO:		   .equ 0x030
 ASCII_NINE:		   .equ 0x039
 ASCII_x:		   .equ 0x078
 
+ASCII_A:		   .equ 0x041
+ASCII_B:		   .equ 0x042
+ASCII_C:		   .equ 0x043
+ASCII_D:		   .equ 0x044
+ASCII_E:		   .equ 0x045
+ASCII_F:		   .equ 0x046
 
 
 rgb_led_init:
@@ -154,26 +180,59 @@ rgb_led_init:
 	POP {pc}
 
 
+
 pwm_with_gpt:
 	PUSH {lr}
 
+	; Turn off LED if it isn't already
+	LDR r0, ptr_to_rgb_input
+	MOV r1, #NULL
+	STR r1, [r0]
+
+	; Ensure reset value is also "off"
+	LDR r0, ptr_to_reset_rgb
+	STR r1, [r0]
+
+	; Initialization
+	BL uart_init
 	BL rgb_led_init
 
+	; Wait for user to start before
+	; 	allowing timer interrupts
 	LDR r0, ptr_to_start_prompt
 	BL output_string
-	
 
-pwm_loop:
+	BL timer_interrupt_init
+
+	; Give user control over continue/exit
+wait_on_user_loop:
+	BL read_character
+	CMP r0, #ASCII_ESC
+	BEQ pwm_gpt_end
+	CMP r0, #ASCII_SPACE
+	BNE wait_on_user_loop
+
+	; Obtain color's hex code from user,
+	;	and convert from a string to actual
+	;	hex value to set proper duty cycles
+	;
+get_input:
+	LDR r0, ptr_to_input_prompt
+	BL output_string
+	LDR r0, ptr_to_input_buffer
+	BL read_string
+	LDR r0, ptr_to_input_buffer
+	BL string2hex
+	LDR r1, ptr_to_rgb_input
+	STR r0, [r1]
+	LDR r1, ptr_to_reset_rgb
+	STR r0, [r1]
+	B wait_on_user_loop
 
 
-	POP {pc}
-
-
-
-Blinky:
-	PUSH {lr}
-
-
+pwm_gpt_end:
+	LDR r0, ptr_to_goodbye
+	BL output_string
 
 	POP {pc}
 
@@ -194,8 +253,15 @@ Advanced_RGB_LED:
 	; r0 = input to illuminate_RGB_LED
 	MOV r0, #NULL
 
+	; Each RGB value has a global byte
+	;	containing its "duty cycle," i.e.,
+	;	some value from 0-255
 	LDR r3, ptr_to_rgb_input
 	LDR r2, [r3]
+
+	; Decrement each value and once all three hit
+	;	0, reset the "duty cycle" bytes to continue
+	;	the loop until a new color is input
 	TST r2, #0xFF0000
 	ITT NE
 	SUBNE r2, r2, #0x010000
@@ -223,6 +289,66 @@ Advanced_RGB_LED:
 
 	POP {lr}
 	BX lr
+
+
+
+string2hex:
+	PUSH {r4, lr}
+	; r0 = Address of string to decode
+
+	; Assume string is properly formatted
+	;	i.e., first 2 bytes are "0x"
+	MOV r2, #0x002
+	MOV r3, #NULL
+
+hex_loop:
+	LDRB r1, [r0, r2]
+	CMP r1, #NULL
+	BEQ end_hex_loop
+
+	ADD r2, r2, #0x001
+
+	; Ensure that the character is either
+	;	in the range of '0' through '9' or,
+	CMP r1, #ASCII_ZERO
+	ITT LT
+	MOVLT r0, #NULL
+	BLT end_hex_loop
+
+	CMP r1, #ASCII_NINE
+	ITE LE
+	SUBLE r1, r1, #ASCII_ZERO
+	BGT check_abcdef
+
+	B insert_hex_value
+
+check_abcdef:
+	; in the range of 'A' through 'F'
+	CMP r1, #ASCII_A
+	BLT end_hex_loop
+
+	CMP r1, #ASCII_F
+	BGT end_hex_loop
+
+	; Subtract 55 to get integer value
+	SUB r1, r1, #0x037
+
+insert_hex_value:
+	; Insert hex value at appropriate position
+	;	based on current byte being read, which
+	;	is done from most- to least-significant byte
+	;
+	LSL r4, r2, #0x002
+	RSB r4, r4, #0x020
+	LSL r4, r1, r4
+	ORR r3, r4, r3
+
+	B hex_loop
+
+end_hex_loop:
+	; r0 = Corresponding hex value
+	MOV r0, r3
+	POP {r4, pc}
 
 
 	.end
