@@ -48,6 +48,7 @@ reset_rgb:			.word 0x000000
 
 	.global string2int
 	.global int2string
+	.global string2hex
 	.global division
 	.global multiplication
 	.global newline
