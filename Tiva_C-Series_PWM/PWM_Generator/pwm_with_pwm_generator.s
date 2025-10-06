@@ -25,10 +25,11 @@ green_duty_cycle:	.byte 0x00
 
 	.text
 	.global Advanced_RGB_LED
-	.global illuminate_RGB_LED
-	.global rgb_led_init
 	.global pwm_init
-	.global pwm_project
+	.global gptm_init
+	.global gpio_init
+	.global pwm_with_generator
+	.global update_duty_cycles
 
 	.global uart_interrupt_init
 	.global timer_interrupt_init
@@ -169,33 +170,56 @@ ASCII_F:		 	.equ 0x046
 
 
 ; Program-specific
-RED_LED:		 	.equ 0x002	; PF1 (Red) Mask
-BLUE_LED:		 	.equ 0x004	; PF2 (Blue) Mask
-GREEN_LED:		 	.equ 0x008	; PF3 (Green) Mask
+RED_LED:		 	.equ 0x020	; PF1 (Red) Mask
+BLUE_LED:		 	.equ 0x040	; PF2 (Blue) Mask
+GREEN_LED:		 	.equ 0x080	; PF3 (Green) Mask
 RGB_LED_PINS:  	 	.equ 0x00E	; GPIO Port F Pins 1-3 Mask
 PWM_GEN_MASK:	 	.equ 0x0E0	; PWM Generator Pins 1-3 Mask
 GPIO_PORTF_RCGC: 	.equ 0x020	; GPIO Port F Enable RCGC Mask
 
-CMPA_CONF_MASK:	 	.equ 0x08C
-CMPB_CONF_MASK:		.equ 0x80C
+CMPA_CONF_MASK:	 	.equ 0x041
+CMPB_CONF_MASK:		.equ 0x401
 
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END MACROS <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
-pwm_project:
+pwm_with_generator:
 	PUSH {lr}
 
 	BL uart_init
 	BL gptm_init
+	BL gpio_init
 	BL pwm_init
 
-	; Monitor status for debugging
-	MOV r0, #0xE000
-	MOVT r0, #0x400F
-inf_loop:
-	LDR r1, [r0, #PPPWM]
-	B inf_loop
+
+	LDR r0, ptr_to_start_prompt
+	BL output_string
+
+wait_on_user_loop:
+	BL read_character
+	CMP r0, #ASCII_ESC
+	BEQ pwm_with_generator_end
+	CMP r0, #ASCII_SPACE
+	BNE wait_on_user_loop
+
+	; Obtain color's hex code from user,
+	;	and convert from a string to actual
+	;	hex value to set proper duty cycles
+	;
+get_input:
+	LDR r0, ptr_to_input_prompt
+	BL output_string
+	LDR r0, ptr_to_input_buffer
+	BL read_string
+	LDR r0, ptr_to_input_buffer
+	BL string2hex
+	BL update_duty_cycles
+	B wait_on_user_loop
+
+pwm_with_generator_end:
+	LDR r0, ptr_to_goodbye
+	BL output_string
 
 	POP {pc}
 
@@ -275,11 +299,8 @@ gpio_init:
 	; Configure GPIOAFSEL to program as PWM pins (pg. 671)
 	STR r1, [r0, #GPIOAFSEL]
 
-	; Program pull-up / pull-down in GPIOPUR / GPIOPDR (pg. 677-679)
-	STR r1, [r0, #GPIOPDR]
-
 	; Must program PMCx field in GPIOPCTL to select M1PWMx (pg. 688, Table 23-5 pg. 1351)
-	MOV r0, #0x5550
+	MOV r1, #0x5550
 	STR r1, [r0, #GPIOPCTL]
 
 	; Enable pins as digital I/Os in GPIODEN (pg. 682)
@@ -307,14 +328,10 @@ pwm_init:
   	ORR r1, r1, #0x002
   	STR r1, [r0, #RCGCPWM]
 
-  	BL gpio_init
-
-	MOV r0, #0xE000
-	MOVT r0, #0x400F
   	; Configure RCC in System Control module to use the
   	;   PWM divide and set to divide by 2 (pg. 254)
   	LDR r1, [r0, #RCC]
-  	MOV r2, #0x008
+  	MOV r2, #0x00B
   	BFI r1, r2, #0x011, #0x004
   	STR r1, [r0, #RCC]
 
@@ -333,34 +350,32 @@ pwm_init:
   	STR r1, [r0, #PWM2CTL]
   	STR r1, [r0, #PWM3CTL]
 
-  	; When Counter = Comparator A, drive pwmA low (pg. 1282)
-  	;	When Counter = PWMnLOAD, drive pwmA high
+  	; When Counter = Comparator A or Zero, invert pwmA (pg. 1282)
   	MOV r1, #CMPA_CONF_MASK
-  	STR r1, [r0, #PWM2GENA]
   	STR r1, [r0, #PWM3GENA]
 
-  	; When Counter = Comparator B, drive pwmB low (pg. 1285)
-  	;	When Counter = PWMnLOAD, drive pwmB high
+  	; When Counter = Comparator B or Zero, invert pwmB (pg. 1285)
   	MOV r1, #CMPB_CONF_MASK
   	STR r1, [r0, #PWM2GENB]
   	STR r1, [r0, #PWM3GENB]
 
 
-  	; Set period (PWM Clk Src is 10 MHz, Sys Clk is divided by 2 -> 400 clock ticks per period)
-  	;  Use this value to set PWMnLOAD reg.
-  	;  In count-down mode, set LOAD field to requested period minus one (pg. 1278)
-  	MOV r1, #0x18F
+  	; Set load to countdown from 255 (pg. 1278)
+  	MOV r1, #0x0FF
   	STR r1, [r0, #PWM2LOAD]
   	STR r1, [r0, #PWM3LOAD]
 
-  	; Set pulse width of MnPWM{2,3} pin for 25% duty cycle (pg. 1280)
-  	MOV r1, #0x12B
-  	STR r1, [r0, #PWM2CMPA]
+  	; Set pulse width for 50% duty cycle (pg. 1280-1281)
+  	;	Blue
+  	MOV r1, #0x0FF
   	STR r1, [r0, #PWM3CMPA]
 
-  	; Set pulse width of MnPWM[2,3] pin for 75% duty cycle (pg. 1281)
-  	MOV r1, #0x063
+	;	Red
+  	MOV r1, #0x0FF
   	STR r1, [r0, #PWM2CMPB]
+
+	; 	Green
+  	MOV r1, #0x0FF
   	STR r1, [r0, #PWM3CMPB]
 
   	; Start timers (pg. 1266)
@@ -370,12 +385,46 @@ pwm_init:
 	nop
 	nop
 
-  	; Enable PWM outputs (pg. 1247)
-  	MOV r1, #PWM_GEN_MASK
-  	STR r1, [r0, #PWMENABLE]
+  	; Wait for user before enabling PWM output
 
 
   	POP {pc}
+
+
+
+update_duty_cycles:
+	PUSH {lr}
+
+	; r0 = Hex color code
+	; r1 = PWM1 base address
+	; r2 = PWMENABLE mask
+	MOV r1, #0x9000
+	MOVT r1, #0x4002
+	MOV r2, #0x000
+
+	; Red
+	ANDS r3, r0, #0xFF0000
+	ITTT GT
+	ORRGT r2, r2, #RED_LED
+	LSLGT r3, r3, #0x010
+	STRGT r3, [r1, #PWM2CMPB]
+
+	; Green
+	ANDS r3, r0, #0x00FF00
+	ITTT GT
+	ORRGT r2, r2, #GREEN_LED
+	LSLGT r3, r3, #0x008
+	STRGT r3, [r1, #PWM3CMPB]
+
+	; Blue
+	ANDS r3, r0, #0x0000FF
+	ITT GT
+	ORRGT r2, r2, #BLUE_LED
+	STRGT r3, [r1, #PWM3CMPA]
+
+	STR r2, [r1, #PWMENABLE]
+
+	POP {pc}
 
 
 
