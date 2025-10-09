@@ -180,6 +180,81 @@ GPIO_PORTF_RCGC: 	.equ 0x020	; GPIO Port F Enable RCGC Mask
 CMPA_CONF_MASK:	 	.equ 0x041
 CMPB_CONF_MASK:		.equ 0x401
 
+
+	.sect macros
+; Note:
+;       The the operations in this macro library do not support
+;       conditional options (i.e., either to set NVZC flags to as a part of an IT block)
+
+; ************************** MOVE IMMEDIATES ******************************
+; Move Full
+;       Takes a 32-bit immediate and loads that value into rd
+MOVF 	.macro reg, data
+		MOV reg, #(data & 0x0000FFFF)
+		MOVT reg, #((data & 0xFFFF0000) >> 16)
+		.endm
+
+
+; Move Full NOT
+;       Takes a 32-bit immediate and loads NOT(value) into rd
+MOVFN 	.macro rd, immed
+		MOVF rd, (~immed)
+		.endm
+
+
+; *********************** LOGICAL OPERATORS ********************************
+
+
+
+; Exclusive-Or
+;   Takes a source register and a flexible operand,
+;   which can be either a register or a 32-bit immediate
+
+XOR 	.macro rd, rs, flexop
+
+		MOVF rd, (src ^^ flexop)
+		.endm
+
+; Nor
+;   Takes a source register and a flexible operand,
+;   which can be either a register or a 32-bit immediate
+
+NOR		.macro rd, rs, flexop
+		.asg rs,src_reg
+		.asg flexop,flex_reg
+		MOVF rd, #(~(src_reg | flex_reg)
+		.endm
+
+; XNOR
+;   Takes a source register and a flexible operand,
+;   which can be either a register or a 32-bit immediate
+
+XNOR 	.macro rd, rs, flexop
+		.asg rs,src_reg
+		.asg flexop,flex_reg
+		MOVF rd, #(~(src_reg ^ flex_reg)
+		.endm
+
+
+; ************************** QUICK CONFIGS *****************************
+
+SRB 	.macro reg,base_addr,offset,value
+		LDR reg, [base_addr, #offset]
+		.asg reg,tmp
+		.eval (tmp | value),tmp
+		MOVF reg, tmp
+		STR reg, [base_addr, #offset]
+		.endm
+
+CLRBIT 	.macro temp,base_addr,offset,value
+		LDR temp, [base_addr, #offset]
+		BIC temp, temp, value
+		STR temp, [base_addr, #offset]
+		.endm
+
+
+	.text
+
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END MACROS <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
@@ -233,8 +308,7 @@ pwm_with_generator_end:
 gptm_init:
 	PUSH {lr}
 	; System control base address
-	MOV r0, #0xE000
-    MOVT r0, #0x400F
+    MOVF r0, 0x400FE000
 
     ; Enable clock on 16/32-bit Timer 0  (pg. 338)
     LDR r1, [r0, #RCGCTIMER]
@@ -242,8 +316,7 @@ gptm_init:
     STR r1, [r0, #RCGCTIMER]
 
 	; 16/32-bit Timer 0 base address
-  	MOV r0, #0x0000
- 	MOVT r0, #0x4003
+  	MOVF r0, 0x40030000
 
 	; Ensure timer is disabled by clearing TAEN bit in GPTMCTL (pg. 737)
   	LDR r1, [r0, #GPTMCTL]
@@ -315,7 +388,6 @@ gpio_init:
 ; Enable clock for PWM module - pg. 354
 ; Set PWM divisor - pg. 254
 
-; Red - Module 1, PWM output 5
 pwm_init:
 	PUSH {lr}
 	; System Control base address
@@ -329,9 +401,9 @@ pwm_init:
   	STR r1, [r0, #RCGCPWM]
 
   	; Configure RCC in System Control module to use the
-  	;   PWM divide and set to divide by 2 (pg. 254)
+  	;   PWM divide and set to divide by 64 (pg. 254)
   	LDR r1, [r0, #RCC]
-  	MOV r2, #0x00B
+  	MOV r2, #0x00F
   	BFI r1, r2, #0x011, #0x004
   	STR r1, [r0, #RCC]
 
@@ -342,8 +414,7 @@ pwm_init:
   	; PF3 -> Module 1 PWM 7, controlled by Module 1 Generator 3
 
   	; PWM Module 1 base address
-  	MOV r0, #0x9000
-  	MOVT r0, #0x4002
+  	MOVF r0, 0x40029000
 
   	; Disable PWM clock via PWMnCTL (pg. 1266)
   	MOV r1, #0x000
@@ -398,27 +469,26 @@ update_duty_cycles:
 	; r0 = Hex color code
 	; r1 = PWM1 base address
 	; r2 = PWMENABLE mask
-	MOV r1, #0x9000
-	MOVT r1, #0x4002
+	MOVF r1, 0x40029000
 	MOV r2, #0x000
 
 	; Red
 	ANDS r3, r0, #0xFF0000
 	ITTT GT
 	ORRGT r2, r2, #RED_LED
-	LSLGT r3, r3, #0x010
+	LSRGT r3, r3, #0x010
 	STRGT r3, [r1, #PWM2CMPB]
 
 	; Green
 	ANDS r3, r0, #0x00FF00
 	ITTT GT
 	ORRGT r2, r2, #GREEN_LED
-	LSLGT r3, r3, #0x008
+	LSRGT r3, r3, #0x008
 	STRGT r3, [r1, #PWM3CMPB]
 
 	; Blue
 	ANDS r3, r0, #0x0000FF
-	ITT GT
+	ITTT GT
 	ORRGT r2, r2, #BLUE_LED
 	STRGT r3, [r1, #PWM3CMPA]
 
