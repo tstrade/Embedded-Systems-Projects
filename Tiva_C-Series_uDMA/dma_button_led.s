@@ -165,6 +165,10 @@ GPIO_PORTF_RCGC: 	.equ 0x020	; GPIO Port F Enable RCGC Mask
 CMPA_CONF_MASK:	 	.equ 0x041
 CMPB_CONF_MASK:		.equ 0x401
 
+.cdecls C,NOLIST
+%{
+    #define CONTROL_WORD 0xCC000009
+%}
 
 	.sect macros
 ; Note:
@@ -202,11 +206,10 @@ dma_init:
 
     ; Button on Port F, Pin 4
     ; LEDs on Port F, Pins 1,2,3
+    ;   Have no events that can generate a burst request 
+    ;   i.e., data will also go push btn -> LED
 
-    ; Port F is burst request only, Channel 15, Enc. 3 (pg. 587)
-
-    ; Burst request signal when peripheral
-    ;   ready to transfer data (Table 9-2, pg. 589)
+    ; Port F is burst only, Channel 15, Enc. 3 (pg. 587)
 
     ;   "When using uDMA to transfer data to and from a peripheral,
     ;    the peripheral must disable all interrupts to the NVIC (pg. 599)
@@ -256,26 +259,46 @@ dma_init:
     ;        to recognize requests for this channel
     STR r1, [r0, #DMAUSEBURSTSET]
 
-    ; Channel Control Structure
+    ; Control Structure Memory Map (Table 9-3, pg. 590)
+    ;
+    ;   Must allocate first have of control table (0x000 - 0x200)
+    ;   Offsets increment by 0x10 (e.g., Ch. 1 primary = 0x10)
+
+    ; Channel Control Structure (Table 9-4, pg. 590)
     ;
     ;   Offset - Description
     ;   0x000  - Source End Pointer
+    ;               Non-incrementing, point to transfer addr.
     ;   0x004  - Destination End Pointer
+    ;               Non-incrementing, point to destination addr.
+    ;      
+    ;      ! Src/Dest pointers will use same base but different !
+    ;      ! offsets in order to select specific GPIO bits      !
+    ;
     ;   0x008  - Control Word
     ;   0x00C  - Unused
 
 
-    ; Channel Control Word 
+    ; Channel Control Word (pg. 611-614)
     ; 
     ;   DSTINC      (31:30) = 0b11 -> No dest. addr increment
     ;   DSTSIZE     (28:28) = 0b00 -> 8-bit dest. data size
     ;   SRCINC      (27:26) = 0b11 -> No src. addr increment
-    ;   SRCSIZE     (25:24) = 0b00 -> 0-bit src. data size
+    ;   SRCSIZE     (25:24) = 0b00 -> 8-bit src. data size
     ;   Reserved    (23:18)
     ;   ARBSIZE     (17:14) = 0x00 -> Arbitrates after 1 transfer
     ;   XFERSIZE    (13:4)  = 0x00 -> Transfer 1 item
     ;   NXTUSEBURST (3)     = 0b01 -> Use burst mode
     ;   XFERMODE    (2:0)   = 0b01 -> Use basic transfer mode
+    ;
+    ;   >>> Control Word = 0xCC000009
+    ;
+    ;       ! Must be reconfigured between each transfer !
+    ;       ! (src/dest pointers will not change)        !
+    ;
+    ;       ! Channel is automatically disabled after a  !
+    ;       ! transfer, must be enabled each time        !
+    
 
 
 
