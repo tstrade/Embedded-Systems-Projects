@@ -204,12 +204,20 @@ dma_project:
 dma_init:
     PUSH {lr}
 
-    ; Button on Port F, Pin 4
-    ; LEDs on Port F, Pins 1,2,3
+    ; 
+    ; LEDs on Port B, Pins 0,1,2,3
     ;   Have no events that can generate a burst request 
     ;   i.e., data will also go push btn -> LED
 
-    ; Port F is burst only, Channel 15, Enc. 3 (pg. 587)
+    ; Port B is burst only, Channel 5, Enc. 3 (pg. 587)
+
+
+    ; GPTM 16/32-bit Timer 0 base: 0x40030000
+    ;   Dedicated channel for each timer
+    ;   Burst request generated on timer interrupt (pg. 705)
+    ;   Use GPIODATA offset 0x03C to control PB0-PB3 (pg. 654)
+
+    ; GPTimer 0A is burst only, Channel 18, End. 0 (pg. 587)
 
     ;   "When using uDMA to transfer data to and from a peripheral,
     ;    the peripheral must disable all interrupts to the NVIC (pg. 599)
@@ -230,33 +238,33 @@ dma_init:
     STR r1, [r0, #DMACFG]
 
     ;   3.) Program location of channel control table by writing
-    ;        the base address of the table to the 
-    ;        DMA Channel Control Base Pointer (DMACTLBASE) register.
-    ;        The base address must be aligned on a 1024-byte boundary
+    ;        the base address of the table to the DMA Channel Control 
+    ;        Base Pointer (DMACTLBASE) register. The base address 
+    ;        must be aligned on a 1024-byte boundary (pg. 619)
     
 
 
     ; Configure the channel attributes (Table 9-3, pg. 590)
-    ;   1.) Program Bit 15 DMA Channel Priority Set (DMAPRIOSET) or
+    ;   1.) Program Bit 5 and 18 DMA Channel Priority Set (DMAPRIOSET) or
     ;        DMA Channel Priority Clear (DMAPRIOCLR) registers to
-    ;        set the channel either to high or default priority
-    LSL r1, r1, #0x00F
+    ;        set the channel either to high or default priority (pg.632)
+    MOVF r1, #0x00040020
     STR r1, [r0, #DMAPRIOSET]
 
-    ;   2.) Set Bit 15 of the DMA Channel Primary Alternate Clear
+    ;   2.) Set Bit 5 and 18 of the DMA Channel Primary Alternate Clear
     ;        (DMAALTCLR) register to select the primary channel 
-    ;        control structure for this transfer
+    ;        control structure for this transfer (pg. 630)
     STR r1, [r0, #DMAALTCLR]
 
     ;
-    ;   3.) Set Bit 15 of the DMA Channel Useburst SET (DMAUSEBURSTSET)
-    ;        register to allow the uDMA controller to respond
+    ;   3.) Set Bit 5 and 18 of the DMA Channel Useburst SET (DMAUSEBURSTSET)
+    ;        register to allow the uDMA controller to respond (pg. 623)
     ;        to burst requests only
     STR r1, [r0, #DMAUSEBURSTSET]
 
-    ;   4.) Set Bit 15 of the DMA Channel Request Mask Clear 
+    ;   4.) Set Bit 5 of the DMA Channel Request Mask Clear 
     ;        (DMAREQMASKCLR) register to allow the uDMA controller
-    ;        to recognize requests for this channel
+    ;        to recognize requests for this channel (pg. 626)
     STR r1, [r0, #DMAUSEBURSTSET]
 
     ; Control Structure Memory Map (Table 9-3, pg. 590)
@@ -301,7 +309,48 @@ dma_init:
     
 
 
-
     POP {pc}
+
+
+
+gptm_init:
+    PUSH {pc}
+
+    ; RCGCTIMER
+    MOVF r0, #0x400FE000
+    MOV r1, #0x001
+    STR r1, [r0, #RCGCTIMER]
+
+    ; 1.) Disable timer in GPTMCTL (pg. 737)
+    MOVF r0, #0x40030000
+    MOV r1, #0x000
+    STR r1, [r0, #GPTMCTL]
+
+    ; 2.) Clear GPTMCFG (pg. 727)
+    STR r1, [r0, #GPTMCFG]
+
+    ; 3.) Write 0x2 to TAMR in GPTMTAMR (pg. 729)
+    MOV r1, #0x002
+    STR r1, [r0, #GPTMTAMR]
+
+    ; 4.) Load start value into GPTMTAILR (pg. 756)
+    MOVF r1, #0x007A1200
+    STR r1, [r0, #GPTMAILR]
+
+    ; 5.) Set GPTMIMR (pg. 745)
+    MOV r1, #0x001
+    STR r1, [r0, #GPTMIMR]
+
+    ; 6.) Set TAEN but in GPTMCTL (pg. 737)
+    STR r1, #0x001
+
+    ; EN0
+
+
+    ; ! Clear interrupts via GPTMICR (pg. 754)
+
+
+
+    POP {lr}
 
     .end
