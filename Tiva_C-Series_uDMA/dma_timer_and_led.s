@@ -2,6 +2,7 @@
     .text
 
     .global dma_project
+    .global dma_init_asm
 
 	.global uart_interrupt_init
 	.global timer_interrupt_init
@@ -56,7 +57,8 @@ DMAUSEBURSTSET:     .equ 0x018  ; DMA Channel Useburst Set
 DMAUSEBURSTCLR:     .equ 0x01C  ; DMA Channel Useburst Clear
 DMAREQMASKSET:      .equ 0x020  ; DMA Channel Request Mask Set
 DMAREQMASKCLR:      .equ 0x024  ; DMA Channel Request Mask Clear
-DMAENASET:          .equ 0x030  : DMA Channel Enable Set
+DMAENASET:          .equ 0x030  ; DMA Channel Enable Set
+DMAALTCLR:			.equ 0x034	; DMA Channel Primary Alternate Clear
 DMAPRIOSET:         .equ 0x038  ; DMA Channel Priority Set
 DMAPRIOCLR:         .equ 0x03C  ; DMA Channel Priority Clear
 DMACHMAP3:          .equ 0x51C  ; DMA Channel Map Select 3
@@ -165,11 +167,6 @@ GPIO_PORTF_RCGC: 	.equ 0x020	; GPIO Port F Enable RCGC Mask
 CMPA_CONF_MASK:	 	.equ 0x041
 CMPB_CONF_MASK:		.equ 0x401
 
-.cdecls C,NOLIST
-%{
-    #define CONTROL_WORD 0xCC000009
-%}
-
 	.sect macros
 ; Note:
 ;       The the operations in this macro library do not support
@@ -201,12 +198,12 @@ dma_project:
     POP {pc}
 
 
-dma_init:
+dma_init_asm:
     PUSH {lr}
 
-    ; 
+    ;
     ; LEDs on Port B, Pins 0,1,2,3
-    ;   Have no events that can generate a burst request 
+    ;   Have no events that can generate a burst request
     ;   i.e., data will also go push btn -> LED
 
     ; Port B is burst only, Channel 5, Enc. 3 (pg. 587)
@@ -238,21 +235,21 @@ dma_init:
     STR r1, [r0, #DMACFG]
 
     ;   3.) Program location of channel control table by writing
-    ;        the base address of the table to the DMA Channel Control 
-    ;        Base Pointer (DMACTLBASE) register. The base address 
+    ;        the base address of the table to the DMA Channel Control
+    ;        Base Pointer (DMACTLBASE) register. The base address
     ;        must be aligned on a 1024-byte boundary (pg. 619)
-    
+
 
 
     ; Configure the channel attributes (Table 9-3, pg. 590)
     ;   1.) Program Bit 5 and 18 DMA Channel Priority Set (DMAPRIOSET) or
     ;        DMA Channel Priority Clear (DMAPRIOCLR) registers to
     ;        set the channel either to high or default priority (pg.632)
-    MOVF r1, #0x00040020
+    MOVF r1, 0x00040020
     STR r1, [r0, #DMAPRIOSET]
 
     ;   2.) Set Bit 5 and 18 of the DMA Channel Primary Alternate Clear
-    ;        (DMAALTCLR) register to select the primary channel 
+    ;        (DMAALTCLR) register to select the primary channel
     ;        control structure for this transfer (pg. 630)
     STR r1, [r0, #DMAALTCLR]
 
@@ -262,15 +259,15 @@ dma_init:
     ;        to burst requests only
     STR r1, [r0, #DMAUSEBURSTSET]
 
-    ;   4.) Set Bit 5 of the DMA Channel Request Mask Clear 
+    ;   4.) Set Bit 5 of the DMA Channel Request Mask Clear
     ;        (DMAREQMASKCLR) register to allow the uDMA controller
     ;        to recognize requests for this channel (pg. 626)
-    STR r1, [r0, #DMAUSEBURSTSET]
+    STR r1, [r0, #DMAREQMASKCLR]
 
     ; Control Structure Memory Map (Table 9-3, pg. 590)
     ;
     ;   Must allocate first have of control table (0x000 - 0x200)
-    ;   Offsets increment by 0x10 (e.g., Ch. 1 primary = 0x10)
+    ;   Offsets = (Channel) # << 4
 
     ; Channel Control Structure (Table 9-4, pg. 590)
     ;
@@ -279,7 +276,7 @@ dma_init:
     ;               Non-incrementing, point to transfer addr.
     ;   0x004  - Destination End Pointer
     ;               Non-incrementing, point to destination addr.
-    ;      
+    ;
     ;      ! Src/Dest pointers will use same base but different !
     ;      ! offsets in order to select specific GPIO bits      !
     ;
@@ -288,7 +285,7 @@ dma_init:
 
 
     ; Channel Control Word (pg. 611-614)
-    ; 
+    ;
     ;   DSTINC      (31:30) = 0b11 -> No dest. addr increment
     ;   DSTSIZE     (28:28) = 0b00 -> 8-bit dest. data size
     ;   SRCINC      (27:26) = 0b11 -> No src. addr increment
@@ -306,51 +303,10 @@ dma_init:
     ;
     ;       ! Channel is automatically disabled after a  !
     ;       ! transfer, must be enabled each time        !
-    
+
 
 
     POP {pc}
 
-
-
-gptm_init:
-    PUSH {pc}
-
-    ; RCGCTIMER
-    MOVF r0, #0x400FE000
-    MOV r1, #0x001
-    STR r1, [r0, #RCGCTIMER]
-
-    ; 1.) Disable timer in GPTMCTL (pg. 737)
-    MOVF r0, #0x40030000
-    MOV r1, #0x000
-    STR r1, [r0, #GPTMCTL]
-
-    ; 2.) Clear GPTMCFG (pg. 727)
-    STR r1, [r0, #GPTMCFG]
-
-    ; 3.) Write 0x2 to TAMR in GPTMTAMR (pg. 729)
-    MOV r1, #0x002
-    STR r1, [r0, #GPTMTAMR]
-
-    ; 4.) Load start value into GPTMTAILR (pg. 756)
-    MOVF r1, #0x007A1200
-    STR r1, [r0, #GPTMAILR]
-
-    ; 5.) Set GPTMIMR (pg. 745)
-    MOV r1, #0x001
-    STR r1, [r0, #GPTMIMR]
-
-    ; 6.) Set TAEN but in GPTMCTL (pg. 737)
-    STR r1, #0x001
-
-    ; EN0
-
-
-    ; ! Clear interrupts via GPTMICR (pg. 754)
-
-
-
-    POP {lr}
 
     .end
