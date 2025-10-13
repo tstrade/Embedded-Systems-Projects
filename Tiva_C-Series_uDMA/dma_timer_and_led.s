@@ -1,8 +1,21 @@
     .data
+
+src:    .byte 0x00          ; Data buffer
+dst:    .word 0x4000500F    ; GPIODATA Port B Pins 0-3
+ctl:    .word 0xCC000009    ; Control Word
+
+
+    .sect "control_channel_table"
+    .align 1024
+    .word src           ; Source End Pointer
+    .word 0x4000500F    ; Destination End Pointer
+    .word 0xCC000009    ; Control Word
+    .word 0x00000000    ; Unused
+    .space 0x1F0        ; Allocation for the rest of the primary control table
+
     .text
 
     .global dma_project
-    .global dma_init_asm
 
 	.global uart_interrupt_init
 	.global timer_interrupt_init
@@ -19,6 +32,10 @@
 	.global division
 	.global multiplication
 	.global newline
+
+ptr_to_channel_control_table:   .word src
+
+    .global ptr_to_channel_control_table
 
 
 ; Cortex M4 Peripherals
@@ -167,7 +184,7 @@ GPIO_PORTF_RCGC: 	.equ 0x020	; GPIO Port F Enable RCGC Mask
 CMPA_CONF_MASK:	 	.equ 0x041
 CMPB_CONF_MASK:		.equ 0x401
 
-	.sect macros
+	.sect "macros"
 ; Note:
 ;       The the operations in this macro library do not support
 ;       conditional options (i.e., either to set NVZC flags to as a part of an IT block)

@@ -4,7 +4,7 @@
 
 static void dma_init ( void );
 static void timer_init ( void );
-
+extern uint32_t ptr_to_channel_control_table;
 /**
  * main.c
  */
@@ -20,10 +20,11 @@ int main(void)
 static void
 dma_init ( void )
 {
-    uint32_t CHANNELS = 0x00040020;                             // Channels 5 & 18 correspond to Timer 0A & GPIO Port B
+    uint32_t CHANNELS = 0x00040020; // Channels 5 & 18 correspond to Timer 0A & GPIO Port B
 
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + RCGCDMA)         = 0x1;      // Enable system clock for DMA
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACFG)          = 0x1;      // Enable uDMA controller
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACTLBASE)      = ptr_to_channel_control_table;
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAPRIOSET)      = CHANNELS; // Select default priority
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTCLR)       = CHANNELS; // Select for primary control structure
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = CHANNELS; // Set burst requests only
@@ -48,7 +49,7 @@ timer_init ( void )
     ;   Have no events that can generate a burst request
     ;   i.e., data will also go push btn -> LED
 
-    ; Port B is burst only, Channel 5, Enc. 3 (pg. 587)
+    ; Port B is burst only, Channel 5 (or 18???), Enc. 3 (pg. 587)
 
 
     ; GPTM 16/32-bit Timer 0 base: 0x40030000
@@ -108,10 +109,6 @@ timer_init ( void )
     ;               Non-incrementing, point to transfer addr.
     ;   0x004  - Destination End Pointer
     ;               Non-incrementing, point to destination addr.
-    ;
-    ;      ! Src/Dest pointers will use same base but different !
-    ;      ! offsets in order to select specific GPIO bits      !
-    ;
     ;   0x008  - Control Word
     ;   0x00C  - Unused
 
