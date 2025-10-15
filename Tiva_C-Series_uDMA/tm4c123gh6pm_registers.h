@@ -117,4 +117,16 @@ const uint32_t  GPTMTBR               = (uint32_t)(0x04C); // Timer B
 /****************************************************************/
 
 
+
+/****************************************************************/
+const uint32_t  UART_MODUL0_BASE_ADDR = (uint32_t)(0x4000C000);
+const uint32_t  UARTDR                = (uint32_t)(0x000); // Data
+const uint32_t  UARTIBRD              = (uint32_t)(0x024); // Integer Baud-Rate Divisor
+const uint32_t  UARTFBRD              = (uint32_t)(0x028); // Fractional Baud-Rate Divisor
+const uint32_t  UARTLCRH              = (uint32_t)(0x02C); // Line Control
+const uint32_t  UARTCTL               = (uint32_t)(0x030); // Control
+const uint32_t  UARTCC                = (uint32_t)(0xFC8); // Clock Configuration
+/****************************************************************/
+
+
 #endif /* __TM4C123GH6PM_REGISTERS_H__ */
