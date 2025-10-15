@@ -6,7 +6,7 @@
 
 
 /****************************************************************/
-const uint32_t *CM4_PERIPHS_BASE_ADDR = (uint32_t *)(0xE000E000U);
+const uint32_t  CM4_PERIPHS_BASE_ADDR = (uint32_t)(0xE000E000);
 const uint32_t  EN0                   = (uint32_t)(0x100); // Interrupt 0-31 Set Enable
 const uint32_t  EN1                   = (uint32_t)(0x104); // Interrupt 32-63 Set Enable
 const uint32_t  EN2                   = (uint32_t)(0x108); // Interrupt 64-95 Set Enable
@@ -25,7 +25,7 @@ const uint32_t  FPDSC                 = (uint32_t)(0xF3C); // Floating-Point Def
 
 
 /****************************************************************/
-const uint32_t *SYS_CONTROL_BASE_ADDR = (uint32_t *)(0x400FE000U);
+const uint32_t  SYS_CONTROL_BASE_ADDR = (uint32_t)(0x400FE000);
 const uint32_t  RCC                   = (uint32_t)(0x060); // Run-Mode Clock Configuration
 const uint32_t  RCGCTIMER             = (uint32_t)(0x604); // 16/32-Bit General-Purpose Timer Run Mode Clock Gating Control
 const uint32_t  RCGCGPIO              = (uint32_t)(0x608); // General-Purpose Input/Output Run Mode Clock Gating Control
@@ -40,9 +40,9 @@ const uint32_t  DMASRCENDP            = (uint32_t)(0x000); // Channel Source End
 const uint32_t  DMADSTENDP            = (uint32_t)(0x004); // Channel Destination Address End Pointer
 const uint32_t  DMACHCTL              = (uint32_t)(0x008); // Channel Control Word
 
-const uint32_t *UDIR_MEMACC_BASE_ADDR = (uint32_t *)(0x400FF000U);
+const uint32_t  UDIR_MEMACC_BASE_ADDR = (uint32_t)(0x400FF000);
 const uint32_t  DMACFG                = (uint32_t)(0x004); // Configuration
-const uint32_t  DMAACTLBASE           = (uint32_t)(0x008); // Channel Control Base Pointer
+const uint32_t  DMACTLBASE            = (uint32_t)(0x008); // Channel Control Base Pointer
 const uint32_t  DMAUSEBURSTSET        = (uint32_t)(0x018); // Channel Useburst Set
 const uint32_t  DMAUSEBURSTCLR        = (uint32_t)(0x01C); // Channel Useburst Clear
 const uint32_t  DMAREQMASKSET         = (uint32_t)(0x020); // Channel Request Mask Set
@@ -59,18 +59,18 @@ const uint32_t  DMACHMAP3             = (uint32_t)(0x51C); // Channel Map Select
 
 
 /****************************************************************/
-const uint32_t *GPIO_PORTAP_BASE_ADDR = (uint32_t *)(0x40004000U); 
-const uint32_t *GPIO_PORTAH_BASE_ADDR = (uint32_t *)(0x40058000U);
-const uint32_t *GPIO_PORTBP_BASE_ADDR = (uint32_t *)(0x40005000U);
-const uint32_t *GPIO_PORTBH_BASE_ADDR = (uint32_t *)(0x40059000U);
-const uint32_t *GPIO_PORTCP_BASE_ADDR = (uint32_t *)(0x40006000U);
-const uint32_t *GPIO_PORTCH_BASE_ADDR = (uint32_t *)(0x4005A000U);
-const uint32_t *GPIO_PORTDP_BASE_ADDR = (uint32_t *)(0x40007000U);
-const uint32_t *GPIO_PORTDH_BASE_ADDR = (uint32_t *)(0x4005B000U);
-const uint32_t *GPIO_PORTEP_BASE_ADDR = (uint32_t *)(0x40024000U);
-const uint32_t *GPIO_PORTEH_BASE_ADDR = (uint32_t *)(0x4005C000U);
-const uint32_t *GPIO_PORTFP_BASE_ADDR = (uint32_t *)(0x40025000U);
-const uint32_t *GPIO_PORTFH_BASE_ADDR = (uint32_t *)(0x4005D000U);
+const uint32_t  GPIO_PORTAP_BASE_ADDR = (uint32_t)(0x40004000);
+const uint32_t  GPIO_PORTAH_BASE_ADDR = (uint32_t)(0x40058000);
+const uint32_t  GPIO_PORTBP_BASE_ADDR = (uint32_t)(0x40005000);
+const uint32_t  GPIO_PORTBH_BASE_ADDR = (uint32_t)(0x40059000);
+const uint32_t  GPIO_PORTCP_BASE_ADDR = (uint32_t)(0x40006000);
+const uint32_t  GPIO_PORTCH_BASE_ADDR = (uint32_t)(0x4005A000);
+const uint32_t  GPIO_PORTDP_BASE_ADDR = (uint32_t)(0x40007000);
+const uint32_t  GPIO_PORTDH_BASE_ADDR = (uint32_t)(0x4005B000);
+const uint32_t  GPIO_PORTEP_BASE_ADDR = (uint32_t)(0x40024000);
+const uint32_t  GPIO_PORTEH_BASE_ADDR = (uint32_t)(0x4005C000);
+const uint32_t  GPIO_PORTFP_BASE_ADDR = (uint32_t)(0x40025000);
+const uint32_t  GPIO_PORTFH_BASE_ADDR = (uint32_t)(0x4005D000);
 const uint32_t  GPIODIR               = (uint32_t)(0x400); // Direction
 const uint32_t  GPIOIS                = (uint32_t)(0x404); // Interrupt Sense
 const uint32_t  GPIOIBE               = (uint32_t)(0x408); // Interrupt Both Edges
@@ -88,18 +88,18 @@ const uint32_t  GPIODMACTL            = (uint32_t)(0x534); // DMA Control
 
 
 /****************************************************************/
-const uint32_t *GPTM_TIMER0_BASE_ADDR = (uint32_t *)(0x40030000U);
-const uint32_t *GPTM_TIMER1_BASE_ADDR = (uint32_t *)(0x40031000U);
-const uint32_t *GPTM_TIMER2_BASE_ADDR = (uint32_t *)(0x40032000U);
-const uint32_t *GPTM_TIMER3_BASE_ADDR = (uint32_t *)(0x40033000U);
-const uint32_t *GPTM_TIMER4_BASE_ADDR = (uint32_t *)(0x40034000U);
-const uint32_t *GPTM_TIMER5_BASE_ADDR = (uint32_t *)(0x40035000U);
-const uint32_t *GPTM_WIDET0_BASE_ADDR = (uint32_t *)(0x40036000U);
-const uint32_t *GPTM_WIDET1_BASE_ADDR = (uint32_t *)(0x40037000U);
-const uint32_t *GPTM_WIDET2_BASE_ADDR = (uint32_t *)(0x4004C000U);
-const uint32_t *GPTM_WIDET3_BASE_ADDR = (uint32_t *)(0x4004D000U);
-const uint32_t *GPTM_WIDET4_BASE_ADDR = (uint32_t *)(0x4004E000U);
-const uint32_t *GPTM_WIDET5_BASE_ADDR = (uint32_t *)(0x4004F000U);
+const uint32_t  GPTM_TIMER0_BASE_ADDR = (uint32_t)(0x40030000);
+const uint32_t  GPTM_TIMER1_BASE_ADDR = (uint32_t)(0x40031000);
+const uint32_t  GPTM_TIMER2_BASE_ADDR = (uint32_t)(0x40032000);
+const uint32_t  GPTM_TIMER3_BASE_ADDR = (uint32_t)(0x40033000);
+const uint32_t  GPTM_TIMER4_BASE_ADDR = (uint32_t)(0x40034000);
+const uint32_t  GPTM_TIMER5_BASE_ADDR = (uint32_t)(0x40035000);
+const uint32_t  GPTM_WIDET0_BASE_ADDR = (uint32_t)(0x40036000);
+const uint32_t  GPTM_WIDET1_BASE_ADDR = (uint32_t)(0x40037000);
+const uint32_t  GPTM_WIDET2_BASE_ADDR = (uint32_t)(0x4004C000);
+const uint32_t  GPTM_WIDET3_BASE_ADDR = (uint32_t)(0x4004D000);
+const uint32_t  GPTM_WIDET4_BASE_ADDR = (uint32_t)(0x4004E000);
+const uint32_t  GPTM_WIDET5_BASE_ADDR = (uint32_t)(0x4004F000);
 const uint32_t  GPTMCFG               = (uint32_t)(0x000); // Configuration
 const uint32_t  GPTMTAMR              = (uint32_t)(0x004); // Timer A Mode
 const uint32_t  GPTMTBMR              = (uint32_t)(0x008); // Timer B Mode
