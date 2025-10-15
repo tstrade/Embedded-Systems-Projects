@@ -201,58 +201,6 @@ MOVFN 	.macro rd, immed
 		MOVF rd, (~immed)
 		.endm
 
-
-; *********************** LOGICAL OPERATORS ********************************
-
-
-
-; Exclusive-Or
-;   Takes a source register and a flexible operand,
-;   which can be either a register or a 32-bit immediate
-
-XOR 	.macro rd, rs, flexop
-
-		MOVF rd, (src ^^ flexop)
-		.endm
-
-; Nor
-;   Takes a source register and a flexible operand,
-;   which can be either a register or a 32-bit immediate
-
-NOR		.macro rd, rs, flexop
-		.asg rs,src_reg
-		.asg flexop,flex_reg
-		MOVF rd, #(~(src_reg | flex_reg)
-		.endm
-
-; XNOR
-;   Takes a source register and a flexible operand,
-;   which can be either a register or a 32-bit immediate
-
-XNOR 	.macro rd, rs, flexop
-		.asg rs,src_reg
-		.asg flexop,flex_reg
-		MOVF rd, #(~(src_reg ^ flex_reg)
-		.endm
-
-
-; ************************** QUICK CONFIGS *****************************
-
-SRB 	.macro reg,base_addr,offset,value
-		LDR reg, [base_addr, #offset]
-		.asg reg,tmp
-		.eval (tmp | value),tmp
-		MOVF reg, tmp
-		STR reg, [base_addr, #offset]
-		.endm
-
-CLRBIT 	.macro temp,base_addr,offset,value
-		LDR temp, [base_addr, #offset]
-		BIC temp, temp, value
-		STR temp, [base_addr, #offset]
-		.endm
-
-
 	.text
 
 ; <<<<<<<<<<<<<<<<<<<<<<<<<<<<<< END MACROS <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
