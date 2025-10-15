@@ -3,24 +3,24 @@
 src:    .word 0x00010203          ; Data buffer
 		.word 0x04050607
 		.word 0x08090A0B
-		.byte 0x0C0D0E0F
+		.word 0x0C0D0E0F
 
     .sect "control_channel_table"
     .align 1024
 
-    .space 0x50			; Channels 0-4 unused
+channel_control:     .space 0x50		 ; Channels 0-4 unused
     ; Channel 5
-    .word src           ; Source End Pointer
-    .word 0x4000503C    ; Destination End Pointer
-    .word 0xCC000009    ; Control Word
-    .word 0x00000000    ; Unused
+channel5:    .word src           ; Source End Pointer
+    		 .word 0x4000503C    ; Destination End Pointer
+    		 .word 0xC0000009    ; Control Word
+    		 .word 0x00000000    ; Unused
 
     .space 0xC0			; Channels 6-17 unused
     ; Channel 18
-    .word src
-    .word 0x4000503C
-    .word 0xCC000009
-    .word 0x00000000
+channel18:   .word src
+    		 .word 0x4000503C
+    		 .word 0xC0000009
+    		 .word 0x00000000
 
     .space 0xD0			; Rest of table allocation
 
@@ -46,9 +46,12 @@ src:    .word 0x00010203          ; Data buffer
 	.global multiplication
 	.global newline
 
-ptr_to_channel_control_table:   .word src
+ptr_to_channel_src:   			.word src
+ptr_to_channel_control:			.word channel_control
+ptr_to_channel5:				.word channel5
+ptr_to_channel18:				.word channel18
 
-    .global ptr_to_channel_control_table
+    .global ptr_to_channel_control
 
 
 	.sect "macros"
@@ -88,7 +91,43 @@ TimerHandler:
 	ORR r1, r1, #0x01
 	STR r1, [r0]
 
+	; Check if DMA channel generated interrupt
+	MOVF r0, 0x400FF504
+	LDR r1, [r0]
+	TST r1, #0x00040000
+	BEQ timer_interrupt_handled
+
+	; Clear DMA channel interrupt
+	STR r1, [r0]
+
+	LDR r0, ptr_to_channel_src
+	LDR r1, [r0]  ; Src. address
+	; If the destination addr. = src + 16, reset to src
+	;	else, allow it to increment
+	ADD r2, r1, #0x10
+	CMP r2, r1
+	IT EQ
+	LDREQ r1, ptr_to_channel_src
+	LDR r0, ptr_to_channel5
+	LDR r2, ptr_to_channel18
+
+	; Set updated src addr.
+	STR r1, [r0], #0x08
+	STR r1, [r2], #0x08
+
+	; Reset control word
+	MOVF r1, 0xC0000009
+	STR r1, [r0]
+	STR r1, [r2]
+
+
+
+timer_interrupt_handled:
+
 	POP {lr}
 	BX lr
+
+
+
 
     .end
