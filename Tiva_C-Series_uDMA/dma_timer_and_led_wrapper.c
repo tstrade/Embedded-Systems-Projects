@@ -4,16 +4,27 @@
 
 static void dma_init ( void );
 static void timer_init ( void );
+static void gpio_init ( void );
 extern uint32_t ptr_to_channel_control_table;
 /**
  * main.c
  */
 int main(void)
 {
-    dma_init ();
-	timer_init ();
+    //dma_init ();
+    //timer_init ();
+    gpio_init ();
 
-	return 0;
+    int i = 15;
+    while (i--)
+    {
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + (uint32_t)0x3FC) += 0x01;
+    }
+
+    timer_init ();
+    dma_init ();
+
+    return 0;
 }
 
 
@@ -23,6 +34,7 @@ dma_init ( void )
     uint32_t CHANNELS = 0x00040020; // Channels 5 & 18 correspond to Timer 0A & GPIO Port B
 
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + RCGCDMA)         = 0x1;      // Enable system clock for DMA
+    asm (" NOP");
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACFG)          = 0x1;      // Enable uDMA controller
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACTLBASE)      = ptr_to_channel_control_table;
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAPRIOSET)      = CHANNELS; // Select default priority
@@ -35,6 +47,7 @@ static void
 timer_init ( void )
 {
     *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCTIMER)   = 0x1;      // Enable system clock for GPTM
+    asm (" NOP");
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)     = 0x0;      // Disable Timer 0A
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCFG)     = 0x0;      // Select 32-bit configuration
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAMR)    = 0x2;      // Set Timer 0 for periodic mode
@@ -43,6 +56,18 @@ timer_init ( void )
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)     = 0x1;      // Enable Timer 0A
     *(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN0)         = 0x80000U; // Enable interrupts on vector table
 }
+
+static void
+gpio_init ( void )
+{
+    *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCGPIO)     |= 0x2;  // Enable system clock for GPIO Port B
+    asm (" NOP");
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIODIR)      |= 0x0F;  // Set PB0-3 as output
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOAFSEL)    &= (~0x0F);
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOPDR)      |= 0x0F;
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIODEN)      |= 0x0F;  // Set digital enable
+}
+
 
 /*
     ; LEDs on Port B, Pins 0,1,2,3
@@ -96,7 +121,7 @@ timer_init ( void )
     ;        (DMAREQMASKCLR) register to allow the uDMA controller
     ;        to recognize requests for this channel (pg. 626)
 
-    
+
     ; Control Structure Memory Map (Table 9-3, pg. 590)
     ;
     ;   Must allocate first have of control table (0x000 - 0x200)
