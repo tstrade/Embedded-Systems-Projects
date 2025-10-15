@@ -1,22 +1,9 @@
     .data
 
-src:    .byte 0x03          ; Data buffer
-		.byte 0x02
-		.byte 0x01
-		.byte 0x00
-		.byte 0x07
-		.byte 0x06
-		.byte 0x05
-		.byte 0x04
-		.byte 0x0B
-		.byte 0x0A
-		.byte 0x09
-		.byte 0x08
-		.byte 0x0F
-		.byte 0x0E
-		.byte 0x0D
-		.byte 0x0C
-
+src:    .word 0x00010203          ; Data buffer
+		.word 0x04050607
+		.word 0x08090A0B
+		.byte 0x0C0D0E0F
 
     .sect "control_channel_table"
     .align 1024

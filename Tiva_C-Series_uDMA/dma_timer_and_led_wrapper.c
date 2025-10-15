@@ -66,6 +66,7 @@ gpio_init ( void )
     *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOAFSEL)    &= (~0x0F);
     *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOPDR)      |= 0x0F;
     *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIODEN)      |= 0x0F;  // Set digital enable
+    // GPIOIS, GPIOIBE, GPIOEV, GPIOIM
 }
 
 
