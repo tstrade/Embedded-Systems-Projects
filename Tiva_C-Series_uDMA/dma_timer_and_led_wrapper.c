@@ -39,7 +39,7 @@ timer_init ( void )
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAMR)   |= 0x2;      // Set Timer 0 for periodic mode
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAILR)   = 0xF42400; // Trigger event every 1s (16e6 cycles)
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMIMR)    |= 0x1;      // Enable Timer 0A time-out interrupts
-    *(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN0)        |= 0x80000U; // Enable interrupts on vector table
+    //*(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN0)        |= 0x80000U; // Enable interrupts on vector table
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)    |= 0x1;      // Enable Timer 0A
 }
 
@@ -71,25 +71,18 @@ uart_init ( void )
 static void
 dma_init ( void )
 {
-    uint32_t CHANNELS = 0x00040020; // Channels 5 & 18 correspond to Timer 0A & GPIO Port B
-
     *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCDMA)         = 0x1;      // Enable system clock for DMA
     asm (" NOP");
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACFG)          = 0x1;      // Enable uDMA controller
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACTLBASE)      = ptr_to_channel_control;
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAPRIOSET)      = CHANNELS; // Select default priority
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTCLR)       = CHANNELS; // Select for primary control structure
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = CHANNELS; // Set burst requests only
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAREQMASKCLR)   = CHANNELS; // Allow uDMA controller to recognize requests
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAPRIOSET)      = 0x40000; // Select default priority
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTCLR)       = 0x40000; // Select for primary control structure
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = 0x40000; // Set burst requests only
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAREQMASKCLR)   = 0x40000; // Allow uDMA controller to recognize requests
 }
 
 /*
     ; LEDs on Port B, Pins 0,1,2,3
-    ;   Have no events that can generate a burst request
-    ;   i.e., data will also go push btn -> LED
-
-    ; Port B is burst only, Channel 5 (or 18???), Enc. 3 (pg. 587)
-
 
     ; GPTM 16/32-bit Timer 0 base: 0x40030000
     ;   Dedicated channel for each timer
