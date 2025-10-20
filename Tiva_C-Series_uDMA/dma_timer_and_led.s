@@ -8,12 +8,12 @@ src:    .word 0x00010203          ; Data buffer
 
     .align 1024
 
-channel_control:     
+channel_control:
     .space 0x120		; Channels 0-17 unused
-    
+
 channel18:   .word src
     		 .word 0x4000503C
-    		 .word 0xC0000009
+    		 .word 0xC00000F1
     		 .word 0x00000000
 
     .space 0xD0			; Rest of table allocation
@@ -83,8 +83,6 @@ TimerHandler:
 	; Check if DMA channel generated interrupt
 	MOVF r0, 0x400FF504
 	LDR r1, [r0]
-	TST r1, #0x00040000
-	BEQ timer_interrupt_handled
 
 	; Clear DMA channel interrupt
 	STR r1, [r0]
@@ -103,7 +101,7 @@ TimerHandler:
 	STR r1, [r0]
 
 	; Reset control word
-	MOVF r1, 0xC0000009
+	MOVF r1, 0xC00000F1
 	STR r1, [r0, #0x08]
 
 
