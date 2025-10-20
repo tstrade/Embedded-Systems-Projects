@@ -21,7 +21,7 @@ int main(void)
     dma_init ();
     timer_init ();
 
-    while (read_character () != ASCII_ESC);
+    while ((*(uint32_t *)(GPIO_PORTBP_BASE_ADDR) & 0x03C) != 0x0F);
 
     return 0;
 }
@@ -58,6 +58,7 @@ static void
 uart_init ( void )
 {
     *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCUART)     |= 0x1;   // Enable system clock for UART0
+    *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCGPIO)     |= 0x1;   // Enable system clock for GPIO Port A
     asm (" NOP");
     *(uint32_t *)(UART_MODUL0_BASE_ADDR + UARTCTL)       = 0x0;   // Disable UART0 Control
     *(uint32_t *)(UART_MODUL0_BASE_ADDR + UARTIBRD)      = 0x8;   // Set for 115200 baud
@@ -79,6 +80,7 @@ dma_init ( void )
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTCLR)       = 0x40000; // Select for primary control structure
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = 0x40000; // Set burst requests only
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAREQMASKCLR)   = 0x40000; // Allow uDMA controller to recognize requests
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAENASET)       = 0x40000; // Enable Channel 18
 }
 
 /*
