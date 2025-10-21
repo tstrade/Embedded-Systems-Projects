@@ -38,7 +38,7 @@ timer_init ( void )
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)     = 0x0;      // Disable Timer 0A
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCFG)     = 0x0;      // Select 32-bit configuration
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAMR)   |= 0x2;      // Set Timer 0 for periodic mode
-    *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAILR)   = 0x7A1200; // Trigger event every 0.5s (8e6 cycles)
+    *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAILR)   = 0xF42400; // Trigger event every 0.5s (8e6 cycles)
     *(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN0)        |= 0x80000U; // Enable interrupts on vector table
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)    |= 0x1;      // Enable Timer 0A
 }
@@ -77,17 +77,16 @@ dma_init ( void )
     asm (" NOP");
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACFG)          = 0x1;      // Enable uDMA controller
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACTLBASE)      = ptr_to_channel_control;
-    *(uint32_t *)(ptr_to_channel_control + 0x120)          = ptr_to_channel_src + 0x10;
+    *(uint32_t *)(ptr_to_channel_control + 0x120)          = ptr_to_channel_src + 0x0F;
     *(uint32_t *)(ptr_to_channel_control + 0x124)          = 0x4000503C;
     *(uint32_t *)(ptr_to_channel_control + 0x128)          = 0xC00000F0;
 
-    //*(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTSET)       = 0x00000;
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTCLR)       = 0x40000; // Select for primary control structure
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAREQMASKCLR)   = 0x40000; // Allow uDMA controller to recognize requests
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = 0x40000; // Set burst requests only
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMASWREQ) = 0x40000;
+    *(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN1)             = 0x4000;  // Allow DMA to interrupt on completion
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAENASET)       = 0x40000; // Enable Channel 18
-    *(uint32_t *)(ptr_to_channel_control + 0x128)          = 0xC00000F1;
+    *(uint32_t *)(ptr_to_channel_control + 0x128)         |= 0x1;
 }
 
 /*
@@ -162,11 +161,11 @@ dma_init ( void )
     ;   SRCSIZE     (25:24) = 0b00 -> 8-bit src. data size
     ;   Reserved    (23:18)
     ;   ARBSIZE     (17:14) = 0x00 -> Arbitrates after 1 transfer
-    ;   XFERSIZE    (13:4)  = 0x00 -> Transfer 1 item
-    ;   NXTUSEBURST (3)     = 0b01 -> Use burst mode
+    ;   XFERSIZE    (13:4)  = 0x10 -> Transfer 16 items
+    ;   NXTUSEBURST (3)     = 0b00 -> N/A
     ;   XFERMODE    (2:0)   = 0b01 -> Use basic transfer mode
     ;
-    ;   >>> Control Word = 0xC0000009
+    ;   >>> Control Word = 0xC0000101
     ;
     ;       ! Must be reconfigured between each transfer !
     ;       ! (src/dest pointers will not change)        !
