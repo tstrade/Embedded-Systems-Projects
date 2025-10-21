@@ -74,20 +74,18 @@ TimerHandler:
 	ORR r1, r1, #0x01
 	STR r1, [r0]
 
-	; Check if DMA channel generated interrupt
-	MOVF r0, 0x400FF504
-	LDR r1, [r0]
-
 	; Clear DMA channel interrupt
+	MOVF r0, 0x400FF504
+	MOV r1, #0x40000;
 	STR r1, [r0]
 
 	LDR r0, ptr_to_channel_control
 	ADD r0, r0, #0x120
 	LDR r1, ptr_to_channel_src
-	ADD r0, r0, #0x010
+	ADD r1, r1, #0x0F
 	STR r1, [r0]
 
-	MOVF r2, 0x400FF014
+	MOVF r2, 0x400FF028
 	MOV r3, #0x40000
 	STR r3, [r2]
 
