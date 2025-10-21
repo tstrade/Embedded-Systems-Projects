@@ -1,22 +1,16 @@
     .data
 
-src:    .word 0x00010203          ; Data buffer
-		.word 0x04050607
-		.word 0x08090A0B
-		.word 0x0C0D0E0F
+src:    .word 0x03020100          ; Data buffer
+		.word 0x07060504
+		.word 0x0B0A0908
+		.word 0x0F0E0D0C
 
 
-    .align 1024
 
+; Allocate space for control table
 channel_control:
-    .space 0x120		; Channels 0-17 unused
-
-channel18:   .word src
-    		 .word 0x4000503C
-    		 .word 0xC00000F1
-    		 .word 0x00000000
-
-    .space 0xD0			; Rest of table allocation
+	.align 1024
+    .space 1024
 
 
     .text
@@ -42,9 +36,9 @@ channel18:   .word src
 
 ptr_to_channel_src:   			.word src
 ptr_to_channel_control:			.word channel_control
-ptr_to_channel18:				.word channel18
 
     .global ptr_to_channel_control
+    .global ptr_to_channel_src
 
 
 	.sect "macros"
@@ -87,30 +81,26 @@ TimerHandler:
 	; Clear DMA channel interrupt
 	STR r1, [r0]
 
-	LDR r0, ptr_to_channel_src
-	LDR r1, [r0]  ; Src. address
-	; If the destination addr. = src + 16, reset to src
-	;	else, allow it to increment
-	ADD r2, r1, #0x10
-	CMP r2, r1
-	IT EQ
-	LDREQ r1, ptr_to_channel_src
-	LDR r0, ptr_to_channel18
-
-	; Set updated src addr.
+	LDR r0, ptr_to_channel_control
+	ADD r0, r0, #0x120
+	LDR r1, ptr_to_channel_src
+	ADD r0, r0, #0x010
 	STR r1, [r0]
+
+	MOVF r2, 0x400FF014
+	MOV r3, #0x40000
+	STR r3, [r2]
 
 	; Reset control word
 	MOVF r1, 0xC00000F1
 	STR r1, [r0, #0x08]
 
 
-
 timer_interrupt_handled:
+
 
 	POP {lr}
 	BX lr
-
 
 
 
