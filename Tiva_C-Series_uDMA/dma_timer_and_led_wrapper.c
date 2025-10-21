@@ -8,7 +8,7 @@ static void gpio_init ( void );
 static void uart_init ( void );
 
 extern uint32_t ptr_to_channel_control;
-extern uint32_t read_character ( void );
+extern uint32_t ptr_to_channel_src;
 
 #define ASCII_ESC (0x01B)
 /**
@@ -21,7 +21,8 @@ int main(void)
     dma_init ();
     timer_init ();
 
-    while ((*(uint32_t *)(GPIO_PORTBP_BASE_ADDR) & 0x03C) != 0x0F);
+
+    while (1);
 
     return 0;
 }
@@ -37,9 +38,8 @@ timer_init ( void )
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)     = 0x0;      // Disable Timer 0A
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCFG)     = 0x0;      // Select 32-bit configuration
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAMR)   |= 0x2;      // Set Timer 0 for periodic mode
-    *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAILR)   = 0xF42400; // Trigger event every 1s (16e6 cycles)
-    *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMIMR)    |= 0x1;      // Enable Timer 0A time-out interrupts
-    //*(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN0)        |= 0x80000U; // Enable interrupts on vector table
+    *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMTAILR)   = 0x7A1200; // Trigger event every 0.5s (8e6 cycles)
+    *(uint32_t *)(CM4_PERIPHS_BASE_ADDR + EN0)        |= 0x80000U; // Enable interrupts on vector table
     *(uint32_t *)(GPTM_TIMER0_BASE_ADDR + GPTMCTL)    |= 0x1;      // Enable Timer 0A
 }
 
@@ -64,6 +64,7 @@ uart_init ( void )
     *(uint32_t *)(UART_MODUL0_BASE_ADDR + UARTIBRD)      = 0x8;   // Set for 115200 baud
     *(uint32_t *)(UART_MODUL0_BASE_ADDR + UARTFBRD)      = 0x2C;  // Set for 115200 baud
     *(uint32_t *)(UART_MODUL0_BASE_ADDR + UARTCC)        = 0x0;   // Use system clock
+
     *(uint32_t *)(GPIO_PORTAP_BASE_ADDR + GPIODEN)      |= 0x3;   // Make PA0-1 digital ports
     *(uint32_t *)(GPIO_PORTAP_BASE_ADDR + GPIOAFSEL)    |= 0x3;   // Set PA0-1 as alt. function
     *(uint32_t *)(GPIO_PORTAP_BASE_ADDR + GPIOPCTL)     |= 0x11;  // Configure PA0-1 for UART
@@ -76,11 +77,17 @@ dma_init ( void )
     asm (" NOP");
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACFG)          = 0x1;      // Enable uDMA controller
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMACTLBASE)      = ptr_to_channel_control;
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAPRIOSET)      = 0x40000; // Select default priority
+    *(uint32_t *)(ptr_to_channel_control + 0x120)          = ptr_to_channel_src + 0x10;
+    *(uint32_t *)(ptr_to_channel_control + 0x124)          = 0x4000503C;
+    *(uint32_t *)(ptr_to_channel_control + 0x128)          = 0xC00000F0;
+
+    //*(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTSET)       = 0x00000;
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAALTCLR)       = 0x40000; // Select for primary control structure
-    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = 0x40000; // Set burst requests only
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAREQMASKCLR)   = 0x40000; // Allow uDMA controller to recognize requests
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAUSEBURSTSET)  = 0x40000; // Set burst requests only
+    *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMASWREQ) = 0x40000;
     *(uint32_t *)(UDIR_MEMACC_BASE_ADDR + DMAENASET)       = 0x40000; // Enable Channel 18
+    *(uint32_t *)(ptr_to_channel_control + 0x128)          = 0xC00000F1;
 }
 
 /*
