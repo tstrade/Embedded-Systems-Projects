@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <inttypes.h>
 #include "tm4c123gh6pm_registers.h"
 
@@ -14,7 +13,7 @@ extern uint32_t ptr_to_channel_src;
 /**
  * main.c
  */
-int main(void)
+int main ( void )
 {
     gpio_init ();
     uart_init ();
