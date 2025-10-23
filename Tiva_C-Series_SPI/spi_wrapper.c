@@ -3,6 +3,15 @@
 
 static void ssi_init ( void );
 
+const uint32_t SSI2Clk  = (uint32_t)(0x010);
+const uint32_t SSI2Fss  = (uint32_t)(0x020);
+const uint32_t SSI2Rx   = (uint32_t)(0x040);
+const uint32_t SSI2Tx   = (uint32_t)(0x080);
+const uint32_t PB_PINS  = (uint32_t)(0x0F0);
+const uint32_t SSI_MOD  = (uint32_t)(0x040);
+const uint32_t PB_CTL   = (uint32_t)(0x22220000);
+
+
 int 
 main ( void )
 {
@@ -12,11 +21,19 @@ main ( void )
 static void
 ssi_init ( void )
 {
-    *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCSSI)  |= 0x1;      // Enable system clock for SSI Module 0
-    *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCGPIO) |= 0x2;      // Enable system clock for GPIO Port B
+    // Init
+    *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCSSI)     |= 0x4;      // Enable system clock for SSI Module 2
+    *(uint32_t *)(SYS_CONTROL_BASE_ADDR + RCGCGPIO)    |= 0x2;      // Enable system clock for GPIO Port B
     asm (" NOP");
-    
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOAFSEL)    = PB_PINS;  // Set PB4-7 as alternate function
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOPCTL)     = PB_CTL;   // Configure PB4-7 for SSI functionality
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIODEN)      = PB_PINS;  // Enable PB4-7 digital functions
 
+    // Config
+    while ( !(*(uint32_t *)(SYS_CONTROL_BASE_ADDR + PRSSI) & 0x040) );
+
+    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR1)      &= ~(0x020); // Ensure SSI is disabled
+    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR1)       = 0x000;    // Configure SSI as master
 }
 
 
@@ -32,23 +49,27 @@ ssi_init ( void )
 
         2. Enable clock to GPIO Port B via RCGCGPIO (pg. 340; Table 23-5, pg. 1351)
 
-        3. Set GPIOAFSEL for PB0-PB7 (pg. 688; Table 23-4, pg. 1344)
+        3. Set GPIOAFSEL for PB4-PB7 (pg. 672)
+        4. Configure PMCn fields via GPIOPCTL to assign SSI signals (pg. 688; Table 10-2, pg. 650)
 
-        4. Configure PMCn fields via GPIOPCTL to assign SSI signals (pg. 688; Table 23-5, pg. 1351)
+        5. Set GPIODEN and configure drive strength, drain select, pull-up/pull-down (pg. 682)
 
-        5. Set GPIODEN and configure drive strength, drain select, pull-up/pull-down (pg. 649)
+        Note: Pull-ups can be used to avoid unnecessary toggles on the SSI pins, which can take the
+                slave to a wrong state. In addition, if the SSIClk signal is programmed to steady state
+                High through the SPO bit in the SSICR0 register, then software must also configure the
+                GPIO port pin corresponding to the SSInClk signal as a pull-up in the GPIO Pull-Up
+                Select (GPIOPUR) register.
 
-        6. 
 
     Config:
-        1. Ensure SSE bit in SSICR1 is cleared
+        1. Ensure SSE bit in SSICR1 is cleared (pg. 971)
 
         2. Select whether SSI is master or slave via SSICR1:
                 Master           = 0x0000.0000
                 Slave w/ output  = 0x0000.0004
                 Slave w/o output = 0x0000.000C
 
-        3. Configure SSI clock source via SSICC
+        3. Configure SSI clock source via SSICC (pg. 984)
 
         4. Configure clock prescale divisor via SSICPSR
 

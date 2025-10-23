@@ -33,6 +33,7 @@ const uint32_t  RCGCDMA               = (uint32_t)(0x60C); // Micro Direct Memor
 const uint32_t  RCGCUART              = (uint32_t)(0x618); // Universal Asynchronous Receiver/Transmitter Run Mode Clock Gating Control
 const uint32_t  RCGCSSI               = (uint32_t)(0x61C); // Synchronous Serial Interface Run Mode Clock Configuration
 const uint32_t  RCGCPWM               = (uint32_t)(0x640); // Pulse Width Modulation Run Mode Clock Gating Control
+const uint32_t  PRSSI                 = (uint32_t)(0xA1C); // Synchronous Serial Interface Peripheral Ready
 /****************************************************************/
 
 
