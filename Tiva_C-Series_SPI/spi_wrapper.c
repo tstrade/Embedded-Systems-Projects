@@ -28,12 +28,29 @@ ssi_init ( void )
     *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOAFSEL)    = PB_PINS;  // Set PB4-7 as alternate function
     *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIOPCTL)     = PB_CTL;   // Configure PB4-7 for SSI functionality
     *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIODEN)      = PB_PINS;  // Enable PB4-7 digital functions
-
-    // Config
+    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + GPIODIR)      = 0x0B0;    // Set P4,P5,P7 as output and P6 as input
+    // PB4 = I/O (clock)
+    // PB5 = I/O (frame signal)
+    // PB6 = I   (receive)
+    // PB7 = O   (transmit)
     while ( !(*(uint32_t *)(SYS_CONTROL_BASE_ADDR + PRSSI) & 0x040) );
 
     *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR1)      &= ~(0x020); // Ensure SSI is disabled
-    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR1)       = 0x000;    // Configure SSI as master
+    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR1)       = 0x0;      // Configure SSI as master
+    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICC)        = 0x0       // Use system clock os baud source
+    // SSInClk = SysClk / (CPSDVSR * (1 + SCR))
+    // SRC is programmed in SSICR0
+    // Must be an even number
+    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICPSR)      = 0x2;      // Set prescale divisor to 2
+
+    // Bit Rate = SysClk / (CPSDVSR * (1 + SCR))
+    //*(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR0)       = 
+    // SPH = 0
+    // SPO = 0
+    // FRF = ?
+    // DSS = 3 (value + 1 = 4-bit data size)
+
+    *(uint32_t *)(SYNC_SIMOD2_BASE_ADDR + SSICR1)       = 0x020;    // Enable SSI operation
 }
 
 
@@ -71,9 +88,9 @@ ssi_init ( void )
 
         3. Configure SSI clock source via SSICC (pg. 984)
 
-        4. Configure clock prescale divisor via SSICPSR
+        4. Configure clock prescale divisor via SSICPSR (pg. 976)
 
-        5. Write SSICR0 with the following:
+        5. Write SSICR0 with the following: (pg. 969)
                 Serial clock rate (SCR)
                 Desired clock phase / polarity, if using Freescale SPI (SPH and SPO)
                 Protocol mode: Freescale SPI, TI SSF< MICROWIRE (FRF)
@@ -83,7 +100,7 @@ ssi_init ( void )
                 Configure uDMA for SSI use (pg. 585)
                 Enable SSI module's TX FIFO or RX FIFO via TXDMAE or RXDMAE in SSIDMACTL
 
-        7. Enable SSI by setting SSE bit in SSICR1
+        7. Enable SSI by setting SSE bit in SSICR1 (pg. 971)
 
 */
 
@@ -96,6 +113,29 @@ ssi_init ( void )
     (EduBase User Guide, pg. 8)
 */
 
+
+
+/*
+    Frame Formats (§15.3.4, pg. 956-964)
+
+    *** TI Synchronous Serial ***
+
+    > SSInFss pin is pulsed for one serial clock period starting at its rising edge
+        prior to transmission of each frame
+        >> The LSB of any given frame is indicated by a pulse for one serial clock period
+
+    > Output data is driven on rising edge of SSInClk and latch data on falling edge
+        
+
+
+
+
+    Freescale SPI
+
+
+    MICROWIRE
+
+*/
 
 
 /*
