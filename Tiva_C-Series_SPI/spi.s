@@ -2,8 +2,8 @@
 
 	.text
 
-	.global Timer0_Handler
-	.global Timer1_Handler
+	.global Timer0A_Handler
+	.global Timer0B_Handler
 
 	.sect "macros"
 
