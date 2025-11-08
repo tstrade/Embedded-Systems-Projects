@@ -42,7 +42,6 @@ static void IntDefaultHandler(void);
 //*****************************************************************************
 extern void _c_int00(void);
 extern void Timer0A_Handler ( void );
-extern void Timer0B_Handler ( void );
 
 //*****************************************************************************
 //
@@ -105,7 +104,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // ADC Sequence 3
     IntDefaultHandler,                      // Watchdog timer
     Timer0A_Handler,                        // Timer 0 subtimer A
-    Timer0B_Handler,                        // Timer 0 subtimer B
+    IntDefaultHandler,                      // Timer 0 subtimer B
     IntDefaultHandler,                      // Timer 1 subtimer A
     IntDefaultHandler,                      // Timer 1 subtimer B
     IntDefaultHandler,                      // Timer 2 subtimer A
