@@ -1,7 +1,7 @@
 #include "tm4c123gh6pm_registers.h"
-#include <stdio.h>
 
 static void adc_init ( void );
+extern int poll_adc ( void );
 
 /**
  * main.c
@@ -9,17 +9,14 @@ static void adc_init ( void );
 int main(void)
 {
     adc_init ();
-
-    uint32_t value;
+    uint32_t data;
 
     while (1)
     {
-        *(uint32_t *)(ANALOG_DIG0_BASE_ADDR + ADCPSSI) = 0x8;
-        while ( (*(uint32_t *)(ANALOG_DIG0_BASE_ADDR + ADCRIS) & 0x8) == 0x0);
-        value = *(uint32_t *)(ANALOG_DIG0_BASE_ADDR + ADCSSFIFO3) & 0x0FFF;
-        *(uint32_t *)(ANALOG_DIG0_BASE_ADDR + ADCISC) = 0x8;
+        data = poll_adc ();
     }
-	return 0;
+
+    return 0;
 }
 
 static void
