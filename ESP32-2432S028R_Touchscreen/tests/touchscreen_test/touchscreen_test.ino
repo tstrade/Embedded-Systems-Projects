@@ -12,26 +12,14 @@ TFT_eSPI tft = TFT_eSPI ();
 
 SPIClass touchscreenSPI = SPIClass (VSPI);
 XPT2046_Touchscreen touchscreen (XPT2046_CS, XPT2046_IRQ);
+TFT_eSPI_Button start_btn = TFT_eSPI_Button ();
+TFT_eSprite buddy = TFT_eSprite (&tft);
 
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 240
-#define FONT_SIZE       2
+#define FONT_SIZE       1
 
 int x, y, z;
-bool started = false;
-
-void 
-printTouchToSerial (int touchX, int touchY, int touchZ)
-{
-  Serial.print ("X = ");
-  Serial.print (touchX);
-  Serial.print (" | Y = ");
-  Serial.print (touchY);
-  Serial.print (" | Pressure = ");
-  Serial.print (touchZ);
-  Serial.println ();
-}
-
 
 void
 printTouchToDisplay (int touchX, int touchY, int touchZ)
@@ -58,10 +46,15 @@ printTouchToDisplay (int touchX, int touchY, int touchZ)
 }
 
 
-void 
-drawMenuBar ( void )
+bool
+create_buddy ( void )
 {
-  tft.fillSmoothRoundRect (20, 20, SCREEN_WIDTH - 40, 50, 10, TFT_BLUE, TFT_WHITE);
+  buddy.createSprite (1, 1, 1);
+  if (!buddy.create ())
+    return false;
+
+  buddy.setPaletteColor (0, TFT_RED);
+  buddy.setBitmapColor (TFT_PURPLE, TFT_WHITE);
 }
 
 void setup() {
@@ -76,15 +69,13 @@ void setup() {
   tft.setRotation (1);
 
   tft.fillScreen (TFT_WHITE);
-  tft.setTextColor (TFT_BLACK, TFT_BLUE);
+  tft.setTextColor (TFT_BLACK, TFT_WHITE);
 
   int centerX = SCREEN_WIDTH >> 1;
   int centerY = SCREEN_HEIGHT >> 1;
 
-  drawMenuBar ();
-  //tft.drawCentreString ("Hello, world!", centerX, 30, FONT_SIZE);
-  tft.drawCentreString ("Press here to begin testing", centerX, 35, 3);
-  //tft.setTextColor (TFT_BLACK, TFT_WHITE);
+  start_btn.initButton (&tft, centerX, centerY, 300, 50, TFT_BLACK, TFT_BLUE, TFT_WHITE, "Start Button", 2);
+  start_btn.drawButton (false, "Press here to start!");
 }
 
 void loop() {
@@ -96,15 +87,14 @@ void loop() {
     y = map (p.y, 240, 3800, 1, SCREEN_HEIGHT);
     z = p.z;
 
-    if (!started && x > 20 && x < (SCREEN_WIDTH - 40) && y > 20 && y < 70)
+    if (start_btn.contains (x, y))
     {
-      started = true;
+      start_btn.press (true);
       delay (200);
     }
     
-    if (started)
+    if (start_btn.isPressed ())
     {
-      printTouchToSerial (x, y, z);
       printTouchToDisplay (x, y, z);
     }
 
