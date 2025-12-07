@@ -76,7 +76,7 @@ extern cmd get_auth_dev_count;
 extern cmd mru_auth_dev;
 
 extern cmd get_module_working_state;
-extern init_spp_profile_lib;
+extern cmd init_spp_profile_lib;
 
 extern cmd inquiry_btdev;
 extern cmd cancel_inquiry_btdev;
@@ -88,7 +88,6 @@ extern cmd disconnect;
 
 
 void send_command ( cmd, ... );
-
 
 
 #endif /* __HC05_COMMANDS_H__ */
