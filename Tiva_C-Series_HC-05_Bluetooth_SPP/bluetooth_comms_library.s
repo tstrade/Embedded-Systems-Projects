@@ -3,20 +3,35 @@
 command_buffer:
 	.space 128
 
+response_buffer:
+	.space 128
+
 	.text
 
 	.global strcmp
 	.global strcat
 	.global strlen
+	.global strcpy
+
 	.global output_character
+	.global output_hc05_char
 	.global read_character
+	.global read_hc05_char
+
 	.global output_string
+	.global output_hc05_cmd
 	.global read_string
+	.global read_hc05_rsp
+
 	.global clear_cmd_buffer
+	.global clear_rsp_buffer
+
 
 cmd_buff_ptr:	.word command_buffer
+rsp_buff_ptr:	.word response_buffer
 
 	.global cmd_buff_ptr
+	.global rsp_buff_ptr
 
 NULL_BYTE:	.equ 0x00
 U0FR:		.equ 0x18
@@ -120,6 +135,23 @@ len_loop:
 
 ; *******************************************************************************************************
 
+; r0 = src address, r1 = dst address
+strcpy:
+	PUSH {lr}
+
+loop_cpy:
+	LDRB r2, [r0], #0x1
+	CMP r2, #NULL_BYTE
+	BEQ end_cpy
+
+	STRB r2, [r1], #0x1
+	B loop_cpy
+
+end_cpy:
+	POP {pc}
+
+; *******************************************************************************************************
+
 output_character:
 	PUSH {lr}
 
@@ -136,6 +168,22 @@ poll_txff:
 
 ; *******************************************************************************************************
 
+output_hc05_char:
+	PUSH {lr}
+
+	MOVF r1, 0x4000D000
+
+poll_tx:
+	LDRB r2, [r1, #0x18]
+	TST r2, #0x20
+	BNE poll_tx
+
+	STRB r0, [r1]
+
+	POP {pc}
+
+; *******************************************************************************************************
+
 read_character:
 	PUSH {lr}
 
@@ -147,6 +195,22 @@ RxFETest:
 	BNE	RxFETest			; RxFE is empty, loop
 
 	LDRB r0, [r1]			; Load data into r0
+
+	POP {pc}
+
+; *******************************************************************************************************
+
+read_hc05_char:
+	PUSH {lr}
+
+	MOVF r1, 0x4000D000
+
+poll_rx:
+	LDRB r2, [r1, #0x18]
+	TST r2, #0x10
+	BNE poll_rx
+
+	LDRB r0, [r1]
 
 	POP {pc}
 
@@ -174,6 +238,32 @@ enter:
 
 ; *******************************************************************************************************
 
+read_hc05_rsp:
+	PUSH {r4, r5, lr}
+
+	MOV r4, r0 ; Number of expected responses
+	LDR r5, rsp_buff_ptr
+
+poll_read_rsp:
+	BL read_hc05_char
+	STRB r0, [r5], #0x1
+
+	CMP r0, #ASCII_NL
+	IT EQ
+	SUBEQ r4, r4, #0x1
+
+	CMP r4, #0x0
+	BEQ end_read_rsp
+	B poll_read_rsp
+
+end_read_rsp:
+	MOV r1, #NULL_BYTE
+	STRB r1, [r5]
+
+	POP {r4, r5, pc}
+
+; *******************************************************************************************************
+
 output_string:
 	PUSH {r4, lr}
 
@@ -194,19 +284,56 @@ output_string_end:
 
 ; *******************************************************************************************************
 
+output_hc05_cmd:
+	PUSH {r4, lr}
+
+	MOV r4, r0
+
+poll_cmd_str:
+	LDRB r0, [r4], #0x01
+
+	CMP r0, #ASCII_NL
+	BEQ end_cmd_str
+
+	BL output_hc05_char
+	B poll_cmd_str
+
+end_cmd_str:
+	BL output_hc05_char
+	POP {r4, pc}
+
+; *******************************************************************************************************
+
 clear_cmd_buffer:
 	PUSH {lr}
 
 	LDR r0, cmd_buff_ptr
 	MOV r1, #0x10
 	MOV r2, #0x000
-clear_loop:
+clear_cmd_loop:
 	SUBS r1, r1, #0x01
-	BEQ end_clear
+	BEQ end_cmd_clear
 	STRD r2, r2, [r0], #0x8
-	B clear_loop
+	B clear_cmd_loop
 
-end_clear:
+end_cmd_clear:
+	POP {pc}
+
+; *******************************************************************************************************
+
+clear_rsp_buffer:
+	PUSH {lr}
+
+	LDR r0, rsp_buff_ptr
+	MOV r1, #0x10
+	MOV r2, #0x000
+clear_rsp_loop:
+	SUBS r1, r1, #0x01
+	BEQ end_rsp_clear
+	STRD r2, r2, [r0], #0x8
+	B clear_rsp_loop
+
+end_rsp_clear:
 	POP {pc}
 
 	.end
