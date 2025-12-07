@@ -58,8 +58,8 @@ uart_init ( void )
     *(uint32_t *)(GPIO_PORTAP_BASE_ADDR + GPIOPCTL)     = 0x011; // Configure PA0, PA1 for UART
 
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTCTL)      = 0x000; // Disable UART1 control
-    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTIBRD)     = 0x008; // Set for 115200 baud (for now)
-    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTFBRD)     = 0x02C; // Set for 115200 baud (for now)
+    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTIBRD)     = 0x068; // Set for 9600 baud
+    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTFBRD)     = 0x00B; // Set for 9600 baud
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTCC)       = 0x000; // Use system clock
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTLCRH)     = 0x060; // 8-bit data, stop bit, no parity
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTCTL)      = 0x301; // Enable UART1 Control
