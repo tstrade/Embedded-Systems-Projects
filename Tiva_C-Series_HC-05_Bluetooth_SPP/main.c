@@ -1,11 +1,8 @@
 #include <inttypes.h>
 #include "tm4c123gh6pm_registers.h"
 #include "HC05_Commands.h"
+#include "bluetooth_comms_library.h"
 
-extern int strcmp ( char *, char * );
-extern char *strcat ( char *, char * );
-extern void output_string ( char * );
-extern void read_string ( char * );
 static void uart_init ( void );
 static void hc05_init ( void );
 
@@ -14,29 +11,25 @@ static void hc05_init ( void );
  */
 int main(void)
 {
-	uart_init ();
+    uart_init ();
+    output_string ("\f");
+    hc05_init ();
 
-	output_string ("\f");
-	send_command (set_module_name, "AKATOSH");
-
-	output_string ("Done!\r\n");
-
-	return 0;
+    return 0;
 }
 
 
 static void
 hc05_init ( void )
 {
-    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + 0x30)         = 0x4; // Set HC-05's PIO11 high
-    asm (" NOP");
-    *(uint32_t *)(GPIO_PORTBP_BASE_ADDR + 0x30)        |= 0x8; // Provide power to HC-05
-
+    send_command (set_module_name, "HC-05");
     send_command (set_module_mode, "1");
-    // Wait for response
-    send_command (set_serial_parameter, "115200", "1", "0");
-    // Wait for response
-    // Drop PO11 low then unpower and repower? Or is it unpower, PO11 low, then repower?
+    send_command (check_module_mode);
+    send_command (set_pin_code, "2003");
+    send_command (check_pin_code);
+    send_command (set_serial_param, "115200", "1", "0");
+    send_command (check_serial_param);
+
 }
 
 
@@ -58,8 +51,8 @@ uart_init ( void )
     *(uint32_t *)(GPIO_PORTAP_BASE_ADDR + GPIOPCTL)     = 0x011; // Configure PA0, PA1 for UART
 
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTCTL)      = 0x000; // Disable UART1 control
-    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTIBRD)     = 0x068; // Set for 9600 baud
-    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTFBRD)     = 0x00B; // Set for 9600 baud
+    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTIBRD)     = 0x01A; // Set for 38400 baud
+    *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTFBRD)     = 0x003; // Set for 38400 baud
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTCC)       = 0x000; // Use system clock
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTLCRH)     = 0x060; // 8-bit data, stop bit, no parity
     *(uint32_t *)(UART_MODUL1_BASE_ADDR + UARTCTL)      = 0x301; // Enable UART1 Control
