@@ -1,25 +1,23 @@
 #include <stdarg.h>
 #include "HC05_Commands.h"
+#include "bluetooth_comms_library.h"
 
-extern void output_string ( char * );
-extern char *strcat ( char *, char * );
-extern void clear_cmd_buffer ( void );
+static void read_command ( cmd );
+
 
 void
 send_command ( cmd command, ... )
 {
-    if (command.num_param == 0)
-    {
-        output_string (command.arg);
-        return;
-    }
-
+    char *cmd_buffer = cmd_buff_ptr;
     va_list args;
     va_start (args, command);
-    char *cmd_buffer;
+
 
     switch (command.num_param)
     {
+    case 0:
+        strcpy (command.arg, cmd_buffer);
+        break;
     case 1:
         cmd_buffer = strcat (command.arg, va_arg (args, char *));
         break;
@@ -49,8 +47,17 @@ send_command ( cmd command, ... )
     }
 
     cmd_buffer = strcat (cmd_buffer, "\r\n");
-    output_string (cmd_buffer);
+    output_hc05_cmd (cmd_buffer);
+    read_command (command);
     clear_cmd_buffer ();
+}
+
+static void
+read_command ( cmd command )
+{
+    read_hc05_rsp (command.num_response);
+    output_string (rsp_buff_ptr);
+    clear_rsp_buffer ();
 }
 
 cmd test = { 0, 1, "AT", "OK" };
@@ -78,7 +85,7 @@ cmd set_query_patterns = { 3, 1, "AT_INQM=", "OK" };
 cmd check_query_patterns = { 0, 2, "AT+INQM?", "+INQM:" };
 
 cmd set_pin_code = { 1, 1, "AT+PSWD=", "OK" };
-cmd check_pin_code = { 0, 2, "AT+PSWD", "+PSWD:"}
+cmd check_pin_code = { 0, 2, "AT+PSWD", "+PSWD:"};
 
 cmd set_serial_param = { 3, 1, "AT+UART=", "OK" };
 cmd check_serial_param = { 0, 2, "AT+UART?", "+UART=" };
@@ -110,7 +117,7 @@ cmd get_auth_dev_count = { 0, 2, "AT+ADCN?", "+ADCN:" };
 cmd mru_auth_dev = { 0, 2, "AT+MRAD?", "+MRAD:" };
 
 cmd get_module_working_state = { 0, 2, "AT+STATE?", "+STATE:" };
-init_spp_profile_lib = { 0, 1, "AT+INIT", "OK" };
+cmd init_spp_profile_lib = { 0, 1, "AT+INIT", "OK" };
 
 // cmd inquiry_btdev = { 0, } <- this one is weird. not clear how many responses to expect
 cmd cancel_inquiry_btdev = { 0, 1, "AT+INQC", "OK" };
@@ -119,4 +126,3 @@ cmd equipment_matching = { 2, 1, "AT+PAIR=", "OK" };
 
 cmd connect_device = { 1, 1, "AT+LINK=", "OK" };
 cmd disconnect = { 1, 2, "AT+DISC=", "+DISK:" };
-
